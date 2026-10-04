@@ -80,6 +80,7 @@ function getStarred2(req: FastifyRequest, reply: FastifyReply): void {
   const songs = db.prepare(`
     SELECT t.id, t.title, t.track_no, t.disc_no, t.duration_s, t.size, t.bitrate,
            t.format, t.path, t.added_at, t.album_id, t.artist_id, t.genre,
+           t.sample_rate, t.bit_depth, t.channels, t.codec, t.lossless,
            t.replaygain_track, t.replaygain_album,
            ar.name AS artist_name, al.name AS album_name, al.year,
            fav.created_at AS starred

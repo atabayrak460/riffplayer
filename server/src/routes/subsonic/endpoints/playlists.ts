@@ -22,6 +22,8 @@ interface PlaylistRow {
   duration: number;
   cover_path: string | null;
   description: string | null;
+  /** Dot-joined ids of the first few tracks — versions the generated mosaic cover. */
+  cover_sig: string | null;
 }
 
 function playlistAttrs(row: PlaylistRow, userId: number) {
@@ -35,7 +37,14 @@ function playlistAttrs(row: PlaylistRow, userId: number) {
     created: isoDate(row.created_at),
     changed: isoDate(row.updated_at),
     allowedUser: row.owner_id === userId ? undefined : row.owner,
-    coverArt: row.cover_path ? `pl-${row.id}` : undefined,
+    // `pl-<id>` = an uploaded cover; `plm-<id>-<sig>` = a mosaic generated from
+    // the playlist's own tracks (the sig changes when those tracks do, so
+    // clients that cache by cover id pick up the new image).
+    coverArt: row.cover_path
+      ? `pl-${row.id}`
+      : row.cover_sig
+        ? `plm-${row.id}-${row.cover_sig}`
+        : undefined,
     // "comment" is the Subsonic API's field name for a playlist's description.
     comment: row.description || undefined,
   };
@@ -44,6 +53,9 @@ function playlistAttrs(row: PlaylistRow, userId: number) {
 const PLAYLIST_QUERY = `
   SELECT p.id, p.name, p.owner_id, p.is_public, p.created_at, p.updated_at, p.cover_path, p.description,
          u.username AS owner,
+         (SELECT GROUP_CONCAT(track_id, '.') FROM (
+            SELECT track_id FROM playlist_tracks WHERE playlist_id = p.id ORDER BY position LIMIT 8
+         )) AS cover_sig,
          COUNT(pt.track_id) AS songCount,
          COALESCE(SUM(t.duration_s), 0) AS duration
   FROM playlists p

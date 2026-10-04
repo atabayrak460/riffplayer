@@ -118,6 +118,11 @@ export interface SongRow {
   replaygain_track: number | null;
   replaygain_album: number | null;
   genre?: string | null;
+  sample_rate?: number | null;
+  bit_depth?: number | null;
+  channels?: number | null;
+  codec?: string | null;
+  lossless?: number | null;
 }
 
 // ── Entity serializers ────────────────────────────────────────────────────────
@@ -171,6 +176,13 @@ export function songAttrs(row: SongRow): Record<string, AttrVal> {
     isVideo: false,
     type: 'music',
     genre: row.genre ?? undefined,
+    // OpenSubsonic audio-format fields (samplingRate / bitDepth / channelCount),
+    // plus codec and lossless as non-standard extras (clients ignore unknown keys).
+    samplingRate: row.sample_rate ?? undefined,
+    bitDepth: row.bit_depth ?? undefined,
+    channelCount: row.channels ?? undefined,
+    codec: row.codec ?? undefined,
+    lossless: row.lossless == null ? undefined : Boolean(row.lossless),
     // OpenSubsonic ReplayGain extension (flat fields; clients may ignore)
     replayGainTrackGain: row.replaygain_track ?? undefined,
     replayGainAlbumGain: row.replaygain_album ?? undefined,

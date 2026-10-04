@@ -1,3 +1,4 @@
+import { qualityCondition } from '../qualityFilter.js';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getDb } from '../../../db/database.js';
 import { sendOk, sendError, SubsonicErrorCode } from '../response.js';
@@ -46,6 +47,7 @@ LEFT JOIN favorites f ON f.item_type = 'album' AND f.item_id = al.id AND f.user_
 export const SONG_SELECT_LIST = `
   t.id, t.title, t.track_no, t.disc_no, t.duration_s, t.size, t.bitrate,
   t.format, t.path, t.added_at, t.album_id, t.artist_id, t.genre,
+  t.sample_rate, t.bit_depth, t.channels, t.codec, t.lossless,
   t.replaygain_track, t.replaygain_album,
   ar.name AS artist_name, al.name AS album_name, al.year,
   f.created_at AS starred`;
@@ -302,7 +304,7 @@ function getSong(req: FastifyRequest, reply: FastifyReply): void {
 }
 
 function getAlbumList2(req: FastifyRequest, reply: FastifyReply): void {
-  const { f, type = 'alphabeticalByName', size = '10', offset = '0', fromYear, toYear, genre } = p(req);
+  const { f, type = 'alphabeticalByName', size = '10', offset = '0', fromYear, toYear, genre, quality } = p(req);
   const db = getDb();
   const userId = req.subsonicUser!.id;
   const lim = Math.min(Number(size), 500);
@@ -359,6 +361,13 @@ function getAlbumList2(req: FastifyRequest, reply: FastifyReply): void {
       break;
     default:
       orderBy = 'al.name';
+  }
+
+  // Quality filter: via a subquery for the same reason as byGenre above — an album
+  // with some qualifying tracks keeps its full songCount/duration.
+  const qualitySql = qualityCondition(quality);
+  if (qualitySql) {
+    extraWhere += ` AND al.id IN (SELECT t.album_id FROM tracks t WHERE ${qualitySql})`;
   }
 
   const needsPlayHistory = type === 'recent' || type === 'frequent';

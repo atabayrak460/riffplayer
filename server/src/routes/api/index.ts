@@ -13,6 +13,7 @@ import { historyPlugin } from './history.js';
 import { librarySidebarPlugin } from './librarySidebar.js';
 import { systemViewsPlugin } from './systemViews.js';
 import { connectPlugin } from './connect.js';
+import { tracksPlugin } from './tracks.js';
 
 // ── Plugin ────────────────────────────────────────────────────────────────────
 // Each area of the custom REST API lives in its own file (auth, me, admin/*,
@@ -53,6 +54,12 @@ export async function apiPlugin(app: FastifyInstance): Promise<void> {
     conn.addHook('preHandler', apiAuth);
     conn.register(connectPlugin);
   }, { prefix: '/connect' });
+
+  // Track details read from the file itself (credits) — all require auth, registered under /tracks/*
+  app.register(async (tr) => {
+    tr.addHook('preHandler', apiAuth);
+    tr.register(tracksPlugin);
+  }, { prefix: '/tracks' });
 
   // Per-user system-view cover + description overrides — all require auth,
   // registered under /system-views/*

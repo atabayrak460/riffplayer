@@ -1,3 +1,4 @@
+import { qualityCondition } from '../qualityFilter.js';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getDb } from '../../../db/database.js';
 import { escapeLike } from '../../../db/likeEscape.js';
@@ -60,16 +61,26 @@ GROUP BY al.id
 ORDER BY al.name
 LIMIT ? OFFSET ?`;
 
-const SONG_COLS_LIKE = `${SONG_SELECT_LIST}${SONG_FROM}
-WHERE t.title LIKE ? ESCAPE '\\'
-ORDER BY t.title
-LIMIT ? OFFSET ?`;
+// Optional extension params on search3 (ignored by stock Subsonic clients):
+// `genre` keeps only tracks whose genre tag equals it (tracks with no genre
+// never match), and `sort` picks the song ordering from this fixed whitelist
+// — never interpolated from user input directly.
+const SONG_SORTS: Record<string, string> = {
+  title: 't.title COLLATE NOCASE',
+  added_desc: 't.added_at DESC, t.id DESC',
+  added_asc: 't.added_at ASC, t.id ASC',
+};
 
-const SONG_COLS_FTS = `${SONG_SELECT_LIST}${SONG_FROM}
-JOIN tracks_fts ON tracks_fts.rowid = t.id
-WHERE tracks_fts MATCH ?
-ORDER BY t.title
+function songQuery(useFts: boolean, genre: boolean, sort: string, qualitySql: string | null): string {
+  const orderBy = SONG_SORTS[sort] ?? 't.title';
+  return `${SONG_SELECT_LIST}${SONG_FROM}
+${useFts ? 'JOIN tracks_fts ON tracks_fts.rowid = t.id' : ''}
+WHERE ${useFts ? 'tracks_fts MATCH ?' : "t.title LIKE ? ESCAPE '\\'"}
+${genre ? 'AND t.genre = ?' : ''}
+${qualitySql ? `AND (${qualitySql})` : ''}
+ORDER BY ${orderBy}
 LIMIT ? OFFSET ?`;
+}
 
 function search3(req: FastifyRequest, reply: FastifyReply): void {
   const {
@@ -78,6 +89,7 @@ function search3(req: FastifyRequest, reply: FastifyReply): void {
     artistCount = '20', artistOffset = '0',
     albumCount = '20',  albumOffset = '0',
     songCount = '20',   songOffset = '0',
+    genre, sort = 'title', quality,
   } = p(req);
 
   const db = getDb();
@@ -92,9 +104,12 @@ function search3(req: FastifyRequest, reply: FastifyReply): void {
   const albums = db
     .prepare(`SELECT ${useFts ? ALBUM_COLS_FTS : ALBUM_COLS_LIKE}`)
     .all(userId, matchArg, Number(albumCount), Number(albumOffset)) as AlbumRow[];
+  const songParams: (string | number)[] = [userId, matchArg];
+  if (genre) songParams.push(genre);
+  songParams.push(Number(songCount), Number(songOffset));
   const songs = db
-    .prepare(`SELECT ${useFts ? SONG_COLS_FTS : SONG_COLS_LIKE}`)
-    .all(userId, matchArg, Number(songCount), Number(songOffset)) as SongRow[];
+    .prepare(`SELECT ${songQuery(useFts, !!genre, sort, qualityCondition(quality))}`)
+    .all(...songParams) as SongRow[];
 
   sendOk(reply, f, {
     xml: xmlTag('searchResult3', {},

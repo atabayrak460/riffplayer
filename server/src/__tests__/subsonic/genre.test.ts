@@ -113,3 +113,51 @@ describe('getAlbumList2 type=byGenre', () => {
     expect(albums[0].songCount).toBe(2);
   });
 });
+
+describe('search3 genre filter and sort', () => {
+  const songsOf = (body: string) =>
+    ((sr(body).searchResult3 as Record<string, unknown[]>).song ?? []) as Record<string, unknown>[];
+
+  it('returns only songs of the given genre', async () => {
+    const res = await app.inject({ url: `/rest/search3.view?${auth}&query=&songCount=50&genre=Jazz` });
+    const songs = songsOf(res.body);
+    expect(songs.map((s) => s.id)).toEqual([String(otherTrackId)]);
+  });
+
+  it('never matches a genre-less track', async () => {
+    getDb().prepare('UPDATE tracks SET genre = NULL WHERE id = ?').run(otherTrackId);
+    const res = await app.inject({ url: `/rest/search3.view?${auth}&query=&songCount=50&genre=Jazz` });
+    expect(songsOf(res.body)).toEqual([]);
+  });
+
+  it('sorts by date added, newest or oldest first', async () => {
+    getDb().prepare('UPDATE tracks SET added_at = 1000 WHERE id = ?').run(ids.trackId);
+    getDb().prepare('UPDATE tracks SET added_at = 2000 WHERE id = ?').run(otherTrackId);
+    const newest = await app.inject({ url: `/rest/search3.view?${auth}&query=&songCount=50&sort=added_desc` });
+    expect(songsOf(newest.body)[0].id).toBe(String(otherTrackId));
+    const oldest = await app.inject({ url: `/rest/search3.view?${auth}&query=&songCount=50&sort=added_asc` });
+    expect(songsOf(oldest.body)[0].id).toBe(String(ids.trackId));
+  });
+});
+
+describe('audio format fields on songs', () => {
+  it('exposes OpenSubsonic samplingRate/bitDepth/channelCount plus codec and lossless', async () => {
+    getDb().prepare(
+      "UPDATE tracks SET sample_rate = 96000, bit_depth = 24, channels = 2, codec = 'FLAC', lossless = 1 WHERE id = ?",
+    ).run(ids.trackId);
+    const res = await app.inject({ url: `/rest/search3.view?${auth}&query=&songCount=50&genre=Rock` });
+    const song = (sr(res.body).searchResult3 as Record<string, Record<string, unknown>[]>).song[0];
+    expect(song.samplingRate).toBe(96000);
+    expect(song.bitDepth).toBe(24);
+    expect(song.channelCount).toBe(2);
+    expect(song.codec).toBe('FLAC');
+    expect(song.lossless).toBe(true);
+  });
+
+  it('omits them when unknown instead of inventing values', async () => {
+    const res = await app.inject({ url: `/rest/search3.view?${auth}&query=&songCount=50&genre=Rock` });
+    const song = (sr(res.body).searchResult3 as Record<string, Record<string, unknown>[]>).song[0];
+    expect(song).not.toHaveProperty('bitDepth');
+    expect(song).not.toHaveProperty('lossless');
+  });
+});

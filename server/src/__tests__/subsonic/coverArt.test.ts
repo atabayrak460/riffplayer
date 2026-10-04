@@ -506,3 +506,121 @@ describe('getCoverArt.view — size param (#72)', () => {
     expect(files).toContain(`pl-${plId}-64.png`);
   });
 });
+
+describe('playlist mosaic cover', () => {
+  const COLORS = [
+    { r: 255, g: 0, b: 0 },
+    { r: 0, g: 255, b: 0 },
+    { r: 0, g: 0, b: 255 },
+    { r: 255, g: 255, b: 0 },
+  ];
+
+  /** Seeds one album+track per entry; `color` null = an album with no cover art at all. */
+  async function seedPlaylist(colors: ({ r: number; g: number; b: number } | null)[]): Promise<string> {
+    const db = getDb();
+    const artistId = Number(db.prepare("INSERT INTO artists (name) VALUES ('A')").run().lastInsertRowid);
+    const trackIds: number[] = [];
+    for (const [i, color] of colors.entries()) {
+      let coverPath: string | null = null;
+      if (color) {
+        coverPath = path.join(tmpDir, `c${i}.png`);
+        await writeFile(
+          coverPath,
+          await sharp({ create: { width: 64, height: 64, channels: 3, background: color } }).png().toBuffer(),
+        );
+      }
+      const albumId = Number(
+        db.prepare('INSERT INTO albums (name, artist_id, cover_path) VALUES (?, ?, ?)')
+          .run(`Album ${i}`, artistId, coverPath).lastInsertRowid,
+      );
+      trackIds.push(
+        Number(
+          db.prepare(`INSERT INTO tracks (title, album_id, artist_id, track_no, duration_s, path, size, format, bitrate)
+                      VALUES (?, ?, ?, 1, 100, ?, 1, 'MPEG', 128)`)
+            .run(`T${i}`, albumId, artistId, `/music/mosaic-${i}.mp3`).lastInsertRowid,
+        ),
+      );
+    }
+    const songs = trackIds.map((t) => `&songId=${t}`).join('');
+    const create = await app.inject({ url: `/rest/createPlaylist.view?${auth}&name=Mix${songs}` });
+    return (JSON.parse(create.body)['subsonic-response'] as Record<string, Record<string, unknown>>)
+      .playlist.id as string;
+  }
+
+  async function coverIdOf(plId: string): Promise<string | undefined> {
+    const res = await app.inject({ url: `/rest/getPlaylist.view?${auth}&id=${plId}` });
+    return (JSON.parse(res.body)['subsonic-response'] as Record<string, Record<string, unknown>>)
+      .playlist.coverArt as string | undefined;
+  }
+
+  async function pixel(buf: Buffer, x: number, y: number): Promise<number[]> {
+    const { data, info } = await sharp(buf).raw().toBuffer({ resolveWithObject: true });
+    const i = (y * info.width + x) * info.channels;
+    return [data[i], data[i + 1], data[i + 2]];
+  }
+
+  it('advertises a mosaic id for a playlist with songs but no uploaded cover, none when empty', async () => {
+    const plId = await seedPlaylist([COLORS[0]]);
+    expect(await coverIdOf(plId)).toMatch(new RegExp(`^plm-${plId}-`));
+
+    const empty = await app.inject({ url: `/rest/createPlaylist.view?${auth}&name=Empty` });
+    const emptyId = (JSON.parse(empty.body)['subsonic-response'] as Record<string, Record<string, unknown>>)
+      .playlist.id as string;
+    expect(await coverIdOf(emptyId)).toBeUndefined();
+  });
+
+  it('draws the first four distinct album covers as a 2x2 grid', async () => {
+    const plId = await seedPlaylist([...COLORS, { r: 255, g: 255, b: 255 }]);
+    const coverId = await coverIdOf(plId);
+    const res = await app.inject({ url: `/rest/getCoverArt.view?${auth}&id=${coverId}` });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/image\/jpeg/);
+
+    const [tl, tr, bl, br] = await Promise.all([
+      pixel(res.rawPayload, 150, 150), pixel(res.rawPayload, 450, 150),
+      pixel(res.rawPayload, 150, 450), pixel(res.rawPayload, 450, 450),
+    ]);
+    expect(tl[0]).toBeGreaterThan(200); expect(tl[1]).toBeLessThan(60);   // red
+    expect(tr[1]).toBeGreaterThan(200); expect(tr[0]).toBeLessThan(60);   // green
+    expect(bl[2]).toBeGreaterThan(200); expect(bl[0]).toBeLessThan(60);   // blue
+    expect(br[0]).toBeGreaterThan(200); expect(br[1]).toBeGreaterThan(200); // yellow
+  });
+
+  it('skips albums without art when picking the four', async () => {
+    const plId = await seedPlaylist([null, ...COLORS]);
+    const res = await app.inject({ url: `/rest/getCoverArt.view?${auth}&id=${await coverIdOf(plId)}` });
+    const tl = await pixel(res.rawPayload, 150, 150);
+    expect(tl[0]).toBeGreaterThan(200); // first tile is the first album that HAS art (red)
+  });
+
+  it('falls back to a single cover when fewer than four albums have art', async () => {
+    const plId = await seedPlaylist([COLORS[2], COLORS[1]]);
+    const res = await app.inject({ url: `/rest/getCoverArt.view?${auth}&id=${await coverIdOf(plId)}` });
+    expect(res.statusCode).toBe(200);
+    const px = await pixel(res.rawPayload, 20, 20);
+    expect(px[2]).toBeGreaterThan(200); // the first album's blue, not a grid
+  });
+
+  it('is DATA_NOT_FOUND when none of the tracks has art', async () => {
+    const plId = await seedPlaylist([null]);
+    const res = await app.inject({ url: `/rest/getCoverArt.view?${auth}&id=plm-${plId}-x` });
+    const body = JSON.parse(res.body)['subsonic-response'] as Record<string, unknown>;
+    expect((body.error as Record<string, unknown>).code).toBe(70);
+  });
+
+  it('lets an uploaded cover win over the mosaic', async () => {
+    const plId = await seedPlaylist(COLORS);
+    getDb().prepare('UPDATE playlists SET cover_path = ? WHERE id = ?').run(path.join(tmpDir, 'c0.png'), plId);
+    expect(await coverIdOf(plId)).toBe(`pl-${plId}`);
+  });
+
+  it('changes the cover id when the playlist\'s tracks change', async () => {
+    const plId = await seedPlaylist([COLORS[0], COLORS[1]]);
+    const before = await coverIdOf(plId);
+    getDb().prepare('DELETE FROM playlist_tracks WHERE playlist_id = ? AND position = 0').run(Number(plId));
+    const after = await coverIdOf(plId);
+    expect(before).toBeDefined();
+    expect(after).toBeDefined();
+    expect(after).not.toBe(before);
+  });
+});

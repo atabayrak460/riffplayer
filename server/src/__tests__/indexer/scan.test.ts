@@ -316,3 +316,40 @@ describe('scanLibrary', () => {
     expect(count).toBe(1);
   });
 });
+
+// ── audio profile (Hi-Fi quality info) ───────────────────────────────────────
+
+describe('scanLibrary — audio profile', () => {
+  const profile = () =>
+    db.prepare('SELECT sample_rate, bit_depth, channels, codec, lossless FROM tracks').get() as {
+      sample_rate: number | null; bit_depth: number | null; channels: number | null;
+      codec: string | null; lossless: number | null;
+    };
+
+  it('stores sample rate, bit depth, channels and losslessness', async () => {
+    writeWav(path.join(tmpDir, 'track.wav'));
+    await scanLibrary(tmpDir);
+
+    const p = profile();
+    expect(p.sample_rate).toBe(44100);
+    expect(p.bit_depth).toBe(16);
+    expect(p.channels).toBe(1);
+    expect(p.lossless).toBe(1);
+    expect(p.codec).toBeTruthy();
+  });
+
+  it('re-reads an unchanged file once when its profile was never recorded (pre-migration rows)', async () => {
+    writeWav(path.join(tmpDir, 'track.wav'));
+    await scanLibrary(tmpDir);
+    db.prepare('UPDATE tracks SET bit_depth = NULL, channels = NULL, codec = NULL, lossless = NULL').run();
+
+    const backfill = await scanLibrary(tmpDir);
+    expect(backfill.updated).toBe(1);
+    expect(backfill.skipped).toBe(0);
+    expect(profile().bit_depth).toBe(16);
+
+    const again = await scanLibrary(tmpDir);
+    expect(again.skipped).toBe(1); // ...but only once
+    expect(again.updated).toBe(0);
+  });
+});

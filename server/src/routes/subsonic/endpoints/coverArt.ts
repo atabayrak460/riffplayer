@@ -243,6 +243,101 @@ async function doExtractAndCacheAlbumArt(
   return fetchFromCoverArtArchive(albumId, coversDir);
 }
 
+/**
+ * The image to use for an album: a manually uploaded cover first, else art
+ * embedded in its first track / fetched from Cover Art Archive (cached on disk).
+ * `cacheKey` is the prefix for resized copies.
+ */
+async function resolveAlbumArt(
+  albumId: number,
+  coversDir: string,
+): Promise<{ filePath: string; mime: string; cacheKey: string } | null> {
+  const album = getDb()
+    .prepare('SELECT cover_path FROM albums WHERE id = ?')
+    .get(albumId) as { cover_path: string | null } | undefined;
+  if (!album) return null;
+
+  if (album.cover_path) {
+    // Separate cache-key namespace from the embedded/CAA path below so a
+    // manually-uploaded cover that's later removed can't serve a stale
+    // resized thumbnail cached under the same album id.
+    return {
+      filePath: album.cover_path,
+      mime: mimeFromPath(album.cover_path),
+      cacheKey: `al-${albumId}-manual`,
+    };
+  }
+
+  const art = await extractAndCacheAlbumArt(albumId, coversDir);
+  return art ? { ...art, cacheKey: `al-${albumId}` } : null;
+}
+
+const MOSAIC_SIZE = 600;
+// How many of a playlist's albums to try (in track order) while hunting for
+// four that actually have art — bounds the work for a playlist of coverless albums.
+const MOSAIC_MAX_ALBUMS_TRIED = 24;
+
+const inFlightMosaics = new Map<string, Promise<void>>();
+
+/**
+ * Cover for a playlist with no uploaded one: a 2x2 grid of the covers of the
+ * first four distinct albums (in playlist order) that have art. Fewer than
+ * four such albums → just the first one's cover, as a lone tile in a grid
+ * would look broken. Returns null when no track has any art.
+ */
+async function resolvePlaylistMosaic(
+  playlistId: number,
+  coversDir: string,
+): Promise<{ filePath: string; mime: string; cacheKey: string } | null> {
+  const rows = getDb()
+    .prepare(
+      `SELECT t.album_id AS albumId FROM playlist_tracks pt
+       JOIN tracks t ON t.id = pt.track_id
+       WHERE pt.playlist_id = ? ORDER BY pt.position`,
+    )
+    .all(playlistId) as { albumId: number }[];
+  const albumIds = [...new Set(rows.map((r) => r.albumId))].slice(0, MOSAIC_MAX_ALBUMS_TRIED);
+
+  const arts: { albumId: number; filePath: string; mime: string; cacheKey: string }[] = [];
+  for (const albumId of albumIds) {
+    const art = await resolveAlbumArt(albumId, coversDir);
+    if (art) arts.push({ albumId, ...art });
+    if (arts.length === 4) break;
+  }
+  if (arts.length === 0) return null;
+  if (arts.length < 4) return arts[0];
+
+  const key = `plm-${playlistId}-${arts.map((a) => a.albumId).join('.')}`;
+  const filePath = path.join(coversDir, `${key}.jpg`);
+  if (!(await fileExists(filePath))) {
+    let inFlight = inFlightMosaics.get(filePath);
+    if (!inFlight) {
+      inFlight = (async () => {
+        await mkdir(coversDir, { recursive: true });
+        const half = MOSAIC_SIZE / 2;
+        const tiles = await Promise.all(
+          arts.map((a) => sharp(a.filePath).resize(half, half, { fit: 'cover' }).jpeg().toBuffer()),
+        );
+        await sharp({
+          create: { width: MOSAIC_SIZE, height: MOSAIC_SIZE, channels: 3, background: '#18181b' },
+        })
+          .composite(tiles.map((input, i) => ({ input, left: (i % 2) * half, top: Math.floor(i / 2) * half })))
+          .jpeg({ quality: 85 })
+          .toFile(filePath);
+      })().finally(() => {
+        inFlightMosaics.delete(filePath);
+      });
+      inFlightMosaics.set(filePath, inFlight);
+    }
+    try {
+      await inFlight;
+    } catch {
+      return arts[0]; // sharp couldn't read one of the images — a single cover beats an error
+    }
+  }
+  return { filePath, mime: 'image/jpeg', cacheKey: key };
+}
+
 async function coverArtHandler(req: FastifyRequest, reply: FastifyReply): Promise<FastifyReply | void> {
   const { id, f, size: sizeRaw } = p(req);
   if (!id)
@@ -277,6 +372,20 @@ async function coverArtHandler(req: FastifyRequest, reply: FastifyReply): Promis
 
   let itemType: 'album' | 'artist' | 'playlist';
   let itemId: number;
+
+  // Generated playlist mosaic: 'plm-<playlistId>-<sig>' (the sig only
+  // versions the id for clients; the image is rebuilt from the live tracks).
+  if (id.startsWith('plm-')) {
+    const playlistId = Number(id.slice(4).split('-')[0]);
+    if (!Number.isInteger(playlistId) || playlistId <= 0) {
+      return sendError(reply, f, { code: SubsonicErrorCode.DATA_NOT_FOUND, message: 'Invalid id' });
+    }
+    const art = await resolvePlaylistMosaic(playlistId, coversDir);
+    if (!art) {
+      return sendError(reply, f, { code: SubsonicErrorCode.DATA_NOT_FOUND, message: 'No cover art' });
+    }
+    return respondWithImage(reply, art.filePath, art.mime, size, coversDir, art.cacheKey);
+  }
 
   if (id.startsWith('al-')) {
     itemType = 'album';
@@ -332,33 +441,18 @@ async function coverArtHandler(req: FastifyRequest, reply: FastifyReply): Promis
 
   // Album: check manual cover_path first
   const album = db
-    .prepare('SELECT cover_path FROM albums WHERE id = ?')
-    .get(itemId) as { cover_path: string | null } | undefined;
+    .prepare('SELECT id FROM albums WHERE id = ?')
+    .get(itemId) as { id: number } | undefined;
   if (!album) {
     return sendError(reply, f, { code: SubsonicErrorCode.DATA_NOT_FOUND, message: 'Album not found' });
   }
 
-  if (album.cover_path) {
-    // Separate cache-key namespace from the embedded/CAA path below so a
-    // manually-uploaded cover that's later removed can't serve a stale
-    // resized thumbnail cached under the same album id.
-    return respondWithImage(
-      reply,
-      album.cover_path,
-      mimeFromPath(album.cover_path),
-      size,
-      coversDir,
-      `al-${itemId}-manual`,
-    );
-  }
-
-  // Fall back to embedded art, cached to disk
-  const art = await extractAndCacheAlbumArt(itemId, coversDir);
+  const art = await resolveAlbumArt(itemId, coversDir);
   if (!art) {
     return sendError(reply, f, { code: SubsonicErrorCode.DATA_NOT_FOUND, message: 'No cover art found' });
   }
 
-  return respondWithImage(reply, art.filePath, art.mime, size, coversDir, `al-${itemId}`);
+  return respondWithImage(reply, art.filePath, art.mime, size, coversDir, art.cacheKey);
 }
 
 export async function coverArtPlugin(app: FastifyInstance): Promise<void> {

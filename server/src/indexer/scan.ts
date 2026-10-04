@@ -207,12 +207,15 @@ async function processFile(
     const mtime = fileStats.mtimeMs;
 
     const existing = db
-      .prepare('SELECT id, mtime FROM tracks WHERE path = ?')
-      .get(filePath) as { id: number; mtime: number | null } | undefined;
+      .prepare('SELECT id, mtime, channels FROM tracks WHERE path = ?')
+      .get(filePath) as { id: number; mtime: number | null; channels: number | null } | undefined;
 
     if (existing) {
       unresolved.delete(filePath);
-      if (existing.mtime === mtime) {
+      // `channels` is NULL only for rows scanned before the audio-profile
+      // columns existed (migration 015): re-read those once even though the
+      // file itself is unchanged, to backfill bit depth / codec / lossless.
+      if (existing.mtime === mtime && existing.channels != null) {
         result.skipped++;
         return;
       }
@@ -242,6 +245,10 @@ async function processFile(
       bitrate: format.bitrate ? Math.round(format.bitrate / 1000) : null,
       format: format.container ?? null,
       sample_rate: format.sampleRate ?? null,
+      bit_depth: format.bitsPerSample ?? null,
+      channels: format.numberOfChannels ?? null,
+      codec: format.codec ?? null,
+      lossless: format.lossless == null ? null : format.lossless ? 1 : 0,
       replaygain_track: common.replaygain_track_gain?.dB ?? null,
       replaygain_album: common.replaygain_album_gain?.dB ?? null,
       mbid: common.musicbrainz_recordingid ?? null,
@@ -255,7 +262,8 @@ async function processFile(
             title = :title, album_id = :album_id, artist_id = :artist_id,
             disc_no = :disc_no, track_no = :track_no, duration_s = :duration_s,
             size = :size, mtime = :mtime, bitrate = :bitrate, format = :format,
-            sample_rate = :sample_rate, replaygain_track = :replaygain_track,
+            sample_rate = :sample_rate, bit_depth = :bit_depth, channels = :channels,
+            codec = :codec, lossless = :lossless, replaygain_track = :replaygain_track,
             replaygain_album = :replaygain_album, mbid = :mbid, genre = :genre
           WHERE path = :path
         `).run({ ...fields, path: filePath });
@@ -278,6 +286,7 @@ async function processFile(
             disc_no = :disc_no, track_no = :track_no, duration_s = :duration_s,
             path = :path, size = :size, mtime = :mtime, bitrate = :bitrate,
             format = :format, sample_rate = :sample_rate,
+            bit_depth = :bit_depth, channels = :channels, codec = :codec, lossless = :lossless,
             replaygain_track = :replaygain_track, replaygain_album = :replaygain_album,
             mbid = :mbid, genre = :genre
           WHERE id = :id
@@ -292,10 +301,12 @@ async function processFile(
         INSERT INTO tracks
           (id, title, album_id, artist_id, disc_no, track_no, duration_s,
            path, size, mtime, bitrate, format, sample_rate,
+           bit_depth, channels, codec, lossless,
            replaygain_track, replaygain_album, mbid, genre)
         VALUES
           (:id, :title, :album_id, :artist_id, :disc_no, :track_no, :duration_s,
            :path, :size, :mtime, :bitrate, :format, :sample_rate,
+           :bit_depth, :channels, :codec, :lossless,
            :replaygain_track, :replaygain_album, :mbid, :genre)
       `).run({ ...fields, id: nextSharedId(db), path: filePath });
       result.added++;
