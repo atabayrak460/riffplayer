@@ -44,6 +44,12 @@ export interface Song {
   type: string;
   replayGainTrackGain?: number;
   replayGainAlbumGain?: number;
+  /** Audio format details (OpenSubsonic names); absent until the server has scanned the file. */
+  samplingRate?: number;
+  bitDepth?: number;
+  channelCount?: number;
+  codec?: string;
+  lossless?: boolean;
 }
 
 export interface Playlist {

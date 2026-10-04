@@ -12,7 +12,7 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
   return (
     <div className="bg-zinc-800/60 rounded-xl p-5 flex flex-col gap-1">
       <p className="text-xs uppercase tracking-widest text-zinc-500">{label}</p>
-      <p className="text-3xl font-bold text-white">{value}</p>
+      <p className="text-3xl font-bold text-zinc-50">{value}</p>
       {sub && <p className="text-sm text-zinc-400">{sub}</p>}
     </div>
   );
@@ -50,7 +50,7 @@ export function WrappedPage() {
           <select
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
-            className="bg-zinc-800 border border-zinc-700 text-sm text-white rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand"
+            className="bg-zinc-800 border border-zinc-700 text-sm text-zinc-50 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand"
           >
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
@@ -99,7 +99,7 @@ export function WrappedPage() {
                   className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
                 />
                 <div>
-                  <p className="text-lg font-bold text-white">{stats.topTracks[0].title}</p>
+                  <p className="text-lg font-bold text-zinc-50">{stats.topTracks[0].title}</p>
                   <p className="text-sm text-zinc-400">{stats.topTracks[0].artist}</p>
                   <p className="text-xs text-zinc-500 mt-1">
                     {stats.topTracks[0].playCount} plays
@@ -126,7 +126,7 @@ export function WrappedPage() {
                       size={36}
                       className="w-9 h-9 rounded-full object-cover flex-shrink-0"
                     />
-                    <p className="text-sm font-medium text-white flex-1">{artist.name}</p>
+                    <p className="text-sm font-medium text-zinc-50 flex-1">{artist.name}</p>
                     <p className="text-xs text-zinc-500">{artist.playCount} plays</p>
                   </Link>
                 ))}
@@ -170,7 +170,7 @@ export function WrappedPage() {
                 <button
                   onClick={() => summaryMut.mutate()}
                   disabled={summaryMut.isPending}
-                  className="bg-brand hover:bg-brand-dim disabled:opacity-60 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+                  className="bg-brand hover:bg-brand-dim disabled:opacity-60 text-on-brand text-sm px-4 py-2 rounded-lg transition-colors"
                 >
                   {summaryMut.isPending ? 'Generating…' : 'Generate with Ollama'}
                 </button>
@@ -197,7 +197,7 @@ export function WrappedPage() {
                   >
                     <span className="text-sm text-zinc-500 w-5 text-right">{i + 1}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">{t.title}</p>
+                      <p className="text-sm font-medium text-zinc-50 truncate">{t.title}</p>
                       <p className="text-xs text-zinc-400 truncate">{t.artist} · {t.album}</p>
                     </div>
                     <p className="text-xs text-zinc-500 flex-shrink-0">{t.playCount} plays</p>

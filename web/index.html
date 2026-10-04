@@ -7,11 +7,24 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#18181b" />
+    <meta name="theme-color" content="#080e1a" />
     <meta name="description" content="Self-hosted music server" />
     <title>RiffPlayer</title>
+    <script>
+      // Apply the saved theme before first paint so there is no dark/light flash.
+      (function () {
+        try {
+          var m = (JSON.parse(localStorage.getItem('cadence-theme') || '{}').state || {}).mode || 'system';
+          var light = m === 'light' || (m === 'system' && matchMedia('(prefers-color-scheme: light)').matches);
+          document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
+          if (light) document.querySelector('meta[name="theme-color"]').setAttribute('content', '#faf7f1');
+          var st = (JSON.parse(localStorage.getItem('cadence-ui-style') || '{}').state || {}).style;
+          if (st && st !== 'default') document.documentElement.setAttribute('data-style', st);
+        } catch (e) {}
+      })();
+    </script>
   </head>
-  <body class="bg-zinc-900 text-white">
+  <body class="bg-zinc-900 text-zinc-50">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

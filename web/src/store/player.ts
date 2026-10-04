@@ -2,15 +2,46 @@ import { create } from 'zustand';
 import { scrobble, streamUrl } from '../api/subsonic';
 import { useDownloadsStore } from './downloads';
 import { getTrackAudioBlob } from '../lib/offlineDb';
+import { replayGainLinear, usePlaybackStore } from './playback';
+import { useEqualizerStore } from './equalizer';
+import { attachEqualizer, updateEqualizer } from '../lib/equalizer';
 import type { Song } from '../api/types';
 
-// Singleton Audio element — lives outside React's render cycle
-const audio = new Audio();
-audio.preload = 'metadata';
+// Audio lives outside React's render cycle. There is one *active* element, and — once gapless
+// playback or crossfade has something to prepare — a second *spare* one that pre-loads the next
+// track; they trade places at each track change (see loadAndPlay).
+function makeAudio(): HTMLAudioElement {
+  const a = new Audio();
+  a.preload = 'metadata';
+  return a;
+}
+let audio = makeAudio();
+// Created lazily (the first pre-load), so a player that never queues a next track has just one.
+let spare: HTMLAudioElement | null = null;
 
-// Tracks the blob: URL currently assigned to `audio.src` (if any) so it can be
-// revoked when playback moves to a different track — object URLs otherwise leak.
-let currentObjectUrl: string | null = null;
+// The next track, loaded into `spare` ahead of time.
+let preloaded: { songId: string } | null = null;
+// Which song a pre-load is currently resolving, so one track isn't prepared twice.
+let preloadingFor: string | null = null;
+// Seconds of crossfade the NEXT loadAndPlay() should use (set only by the end-of-track logic).
+let crossfadeNext = 0;
+// Running volume ramp between the two elements, if any.
+let fadeTimer: ReturnType<typeof setInterval> | null = null;
+// How early before a track's end the next one starts loading (seconds).
+const PRELOAD_AHEAD = 20;
+
+// blob: URLs assigned to each element, so they can be revoked when the element moves on to
+// another track — object URLs otherwise leak.
+const objectUrls = new WeakMap<HTMLAudioElement, string>();
+function setSrc(el: HTMLAudioElement, url: string): void {
+  const old = objectUrls.get(el);
+  if (old) {
+    URL.revokeObjectURL(old);
+    objectUrls.delete(el);
+  }
+  el.src = url;
+  if (url.startsWith('blob:')) objectUrls.set(el, url);
+}
 
 // Incremented on every loadAndPlay() call. resolvePlaybackUrl() has variable
 // latency (IndexedDB lookup for a downloaded track vs. near-synchronous for a
@@ -131,25 +162,142 @@ interface PlayerState {
   toggleShuffle: () => void;
 }
 
+/** The volume an element should play a track at: the user's volume scaled by its ReplayGain. */
+function outputVolume(song: Song | null, userVolume: number): number {
+  const { replayGain, preampDb } = usePlaybackStore.getState();
+  return Math.min(1, Math.max(0, userVolume * replayGainLinear(song, replayGain, preampDb)));
+}
+
+function stopFade(): void {
+  if (fadeTimer) clearInterval(fadeTimer);
+  fadeTimer = null;
+}
+
+/** Pauses playback, first ending any crossfade in progress so the fading-out track doesn't play on. */
+function pauseActive(): void {
+  if (fadeTimer) {
+    stopFade();
+    spare?.pause();
+    audio.volume = outputVolume(usePlayerStore.getState().currentSong, usePlayerStore.getState().volume);
+  }
+  audio.pause();
+}
+
 export const usePlayerStore = create<PlayerState>()((set, get) => {
-  // Sync audio events back into store
-  audio.addEventListener('timeupdate', () => {
-    set({ currentTime: audio.currentTime });
-  });
-  audio.addEventListener('durationchange', () => {
-    set({ duration: audio.duration || 0 });
-  });
-  audio.addEventListener('ended', () => {
-    const { repeatMode, currentSong } = get();
-    if (repeatMode === 'one' && currentSong) {
-      audio.currentTime = 0;
-      audio.play().catch(() => {/* autoplay policy */});
-      return;
+  /** The song that would play after the current one, or null when playback would stop, repeat the
+   *  same track, or reshuffle (none of which can be prepared in advance). */
+  function peekNext(): Song | null {
+    const { queue, queueIndex, repeatMode, shuffle } = get();
+    if (repeatMode === 'one' || !queue.length) return null;
+    if (queueIndex + 1 < queue.length) return queue[queueIndex + 1];
+    return repeatMode === 'all' && !shuffle ? queue[0] : null;
+  }
+
+  /** Loads the next track into the spare element while the current one is nearing its end. */
+  async function preloadNext(): Promise<void> {
+    if (remote.current?.isRemote()) return;
+    const next = peekNext();
+    if (!next || preloaded?.songId === next.id || preloadingFor === next.id) return;
+    preloadingFor = next.id;
+    try {
+      const url = await resolvePlaybackUrl(next);
+      if (peekNext()?.id !== next.id) {
+        if (url.startsWith('blob:')) URL.revokeObjectURL(url); // the queue changed while this resolved
+        return;
+      }
+      if (!spare) {
+        spare = makeAudio();
+        bindAudioEvents(spare);
+      }
+      spare.pause();
+      if (useEqualizerStore.getState().enabled) attachEqualizer(spare);
+      setSrc(spare, url);
+      spare.preload = 'auto';
+      spare.load();
+      preloaded = { songId: next.id };
+    } finally {
+      preloadingFor = null;
     }
-    get().next();
+  }
+
+  /** Called on the active element's timeupdate: prepare the next track, and start the crossfade. */
+  function planTransition(el: HTMLAudioElement): void {
+    const { gapless, crossfadeSec } = usePlaybackStore.getState();
+    if ((!gapless && crossfadeSec <= 0) || !(el.duration > 0) || el.paused) return;
+    const remaining = el.duration - el.currentTime;
+    if (remaining <= PRELOAD_AHEAD + crossfadeSec) void preloadNext();
+
+    const next = peekNext();
+    // Tracks too short to hold the overlap are simply played back to back.
+    if (crossfadeSec > 0 && !fadeTimer && next && preloaded?.songId === next.id
+        && el.duration > crossfadeSec * 2 + 1 && remaining <= crossfadeSec) {
+      crossfadeNext = crossfadeSec;
+      get().next();
+    }
+  }
+
+  /** Ramps `incoming` up and `outgoing` down over `seconds` (equal-power), then stops `outgoing`. */
+  function startFade(outgoing: HTMLAudioElement, incoming: HTMLAudioElement, seconds: number, target: number): void {
+    stopFade();
+    const from = outgoing.volume;
+    const started = Date.now();
+    incoming.volume = 0;
+    fadeTimer = setInterval(() => {
+      const p = Math.min(1, (Date.now() - started) / (seconds * 1000));
+      incoming.volume = target * Math.sin((p * Math.PI) / 2);
+      outgoing.volume = from * Math.cos((p * Math.PI) / 2);
+      if (p >= 1) {
+        stopFade();
+        outgoing.pause();
+      }
+    }, 50);
+  }
+
+  function bindAudioEvents(el: HTMLAudioElement): void {
+    // Both elements are wired the same way; only the active one speaks for the player.
+    el.addEventListener('timeupdate', () => {
+      if (el !== audio) return;
+      set({ currentTime: el.currentTime });
+      planTransition(el);
+    });
+    el.addEventListener('durationchange', () => {
+      if (el === audio) set({ duration: el.duration || 0 });
+    });
+    el.addEventListener('ended', () => {
+      if (el !== audio) return;
+      const { repeatMode, currentSong } = get();
+      if (repeatMode === 'one' && currentSong) {
+        el.currentTime = 0;
+        el.play().catch(() => {/* autoplay policy */});
+        return;
+      }
+      get().next();
+    });
+    el.addEventListener('play', () => {
+      if (el === audio) set({ playing: true });
+    });
+    el.addEventListener('pause', () => {
+      if (el === audio) set({ playing: false });
+    });
+  }
+  bindAudioEvents(audio);
+
+  // Equalizer: wire the elements into the audio graph while it is on, and push band changes into it.
+  function syncEqualizer(): void {
+    const { enabled, gains } = useEqualizerStore.getState();
+    if (enabled) {
+      attachEqualizer(audio);
+      if (spare) attachEqualizer(spare);
+    }
+    updateEqualizer(enabled, gains);
+  }
+  useEqualizerStore.subscribe(syncEqualizer);
+
+  // Changing the ReplayGain settings takes effect on the track that is playing right now.
+  usePlaybackStore.subscribe((state, prev) => {
+    if (state.replayGain === prev.replayGain && state.preampDb === prev.preampDb) return;
+    if (!fadeTimer) audio.volume = outputVolume(get().currentSong, get().volume);
   });
-  audio.addEventListener('play', () => set({ playing: true }));
-  audio.addEventListener('pause', () => set({ playing: false }));
 
   async function loadAndPlay(
     song: Song,
@@ -158,38 +306,53 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
     const generation = ++loadGeneration;
     const autoplay = opts.autoplay !== false;
     currentCounted = opts.counted === true;
-    const url = await resolvePlaybackUrl(song);
-    if (generation !== loadGeneration) return; // a newer loadAndPlay() call already took over
+    const crossfade = crossfadeNext;
+    crossfadeNext = 0;
+    // A fade still running from a previous change must not keep ramping volumes.
+    const wasFading = fadeTimer !== null;
+    stopFade();
+    if (wasFading && spare && !spare.paused) spare.pause();
 
-    if (audio.src !== url) {
-      if (currentObjectUrl) {
-        URL.revokeObjectURL(currentObjectUrl);
-        currentObjectUrl = null;
-      }
-      audio.src = url;
-      if (url.startsWith('blob:')) currentObjectUrl = url;
-      audio.load();
-    }
-
-    // Apply ReplayGain track gain: convert dB → linear and scale user volume
-    const { volume: userVol } = get();
-    if (song.replayGainTrackGain != null) {
-      const gain = Math.pow(10, song.replayGainTrackGain / 20);
-      audio.volume = Math.min(1, Math.max(0, userVol * gain));
+    // Gapless: the song was already pre-loaded into the spare element — swap to it, no waiting.
+    const swap = preloaded?.songId === song.id && spare !== null && !opts.startAt && autoplay;
+    let outgoing: HTMLAudioElement | null = null;
+    if (swap && spare) {
+      preloaded = null;
+      outgoing = audio;
+      audio = spare;
+      spare = outgoing;
     } else {
-      audio.volume = userVol;
+      preloaded = null;
+      const url = await resolvePlaybackUrl(song);
+      if (generation !== loadGeneration) return; // a newer loadAndPlay() call already took over
+      if (audio.src !== url) {
+        setSrc(audio, url);
+        audio.load();
+      }
+    }
+    const el = audio;
+    if (useEqualizerStore.getState().enabled) syncEqualizer();
+
+    // ReplayGain (per the user's settings) scales the user's volume; a crossfade ramps up from 0.
+    const target = outputVolume(song, get().volume);
+    if (swap && outgoing && crossfade > 0 && !outgoing.paused) {
+      startFade(outgoing, el, crossfade, target);
+    } else {
+      el.volume = target;
+      if (outgoing) outgoing.pause();
     }
 
     if (opts.startAt && opts.startAt > 0) {
       const startAt = opts.startAt;
-      if (audio.readyState >= 1) audio.currentTime = startAt;
-      else audio.addEventListener('loadedmetadata', () => { audio.currentTime = startAt; }, { once: true });
+      if (el.readyState >= 1) el.currentTime = startAt;
+      else el.addEventListener('loadedmetadata', () => { el.currentTime = startAt; }, { once: true });
     }
+    if (swap) el.currentTime = 0;
     if (autoplay) {
-      audio.play().catch(() => {/* autoplay policy */});
+      el.play().catch(() => {/* autoplay policy */});
       scrobble(song.id, false).catch(() => {/* best-effort */});
     } else {
-      audio.pause();
+      el.pause();
     }
 
     // Scrobble submission after 30 s or 50% played (whichever first). Replace
@@ -199,16 +362,16 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
     // A play handed over from another device that already counted it must not be counted again.
     let scrobbled = opts.counted === true;
     const onTime = () => {
-      if (!scrobbled && audio.currentTime >= Math.min(30, (audio.duration || 60) * 0.5)) {
+      if (!scrobbled && el.currentTime >= Math.min(30, (el.duration || 60) * 0.5)) {
         scrobbled = true;
         currentCounted = true;
         scrobble(song.id, true).catch(() => {});
-        audio.removeEventListener('timeupdate', onTime);
+        el.removeEventListener('timeupdate', onTime);
         removeScrobbleListener = null;
       }
     };
-    audio.addEventListener('timeupdate', onTime);
-    removeScrobbleListener = () => audio.removeEventListener('timeupdate', onTime);
+    el.addEventListener('timeupdate', onTime);
+    removeScrobbleListener = () => el.removeEventListener('timeupdate', onTime);
 
     // Media Session API
     if ('mediaSession' in navigator) {
@@ -276,7 +439,7 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
     },
 
     pauseLocal: () => {
-      audio.pause();
+      pauseActive();
     },
 
     togglePlay: () => {
@@ -288,7 +451,7 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
       if (audio.paused) {
         audio.play().catch(() => {});
       } else {
-        audio.pause();
+        pauseActive();
       }
     },
 
@@ -307,7 +470,7 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
       let next = queueIndex + 1;
       if (next >= queue.length) {
         if (repeatMode !== 'all') {
-          audio.pause();
+          pauseActive();
           set({ playing: false, currentTime: 0 });
           return;
         }
@@ -363,8 +526,8 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
         r.setVolume(v); // the other device's volume — this device's own stays as it is
         return;
       }
-      audio.volume = v;
       set({ volume: v });
+      if (!fadeTimer) audio.volume = outputVolume(get().currentSong, v);
     },
 
     toggleMute: () => {
@@ -426,7 +589,7 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
         if (index < queueIndex) queueIndex--;
         else if (index === queueIndex) {
           // Stop if the current song is removed
-          audio.pause();
+          pauseActive();
           return { queue, queueIndex: -1, currentSong: null, playing: false, originalQueue };
         }
         return { queue, queueIndex, originalQueue };
@@ -456,7 +619,7 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
     },
 
     clearQueue: () => {
-      audio.pause();
+      pauseActive();
       set({ queue: [], queueIndex: -1, currentSong: null, playing: false, originalQueue: null });
     },
 

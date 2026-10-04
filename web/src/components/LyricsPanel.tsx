@@ -78,7 +78,7 @@ export function LyricsPanel({ onClose, embedded = false }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 flex-shrink-0">
           <div>
-            <p className="text-sm font-semibold text-white">{currentSong?.title ?? 'Lyrics'}</p>
+            <p className="text-sm font-semibold text-zinc-50">{currentSong?.title ?? 'Lyrics'}</p>
             <p className="text-xs text-zinc-400">{currentSong?.artist}</p>
           </div>
           <div className="flex items-center gap-3">
@@ -91,7 +91,7 @@ export function LyricsPanel({ onClose, embedded = false }: Props) {
               </button>
             )}
             {!embedded && (
-              <button onClick={onClose} className="text-zinc-400 hover:text-white transition-colors">
+              <button onClick={onClose} className="text-zinc-400 hover:text-zinc-50 transition-colors">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                 </svg>
@@ -121,7 +121,7 @@ export function LyricsPanel({ onClose, embedded = false }: Props) {
               const size = embedded ? 'text-lg' : 'text-2xl md:text-3xl font-bold';
               const className = `${size} leading-relaxed transition-all duration-300 ${
                 isActive
-                  ? 'text-white font-semibold scale-105 origin-left'
+                  ? 'text-zinc-50 font-semibold scale-105 origin-left'
                   : embedded ? 'text-zinc-500' : 'text-zinc-600'
               }`;
               // Synced lines jump playback to their timestamp on click, and
@@ -132,7 +132,7 @@ export function LyricsPanel({ onClose, embedded = false }: Props) {
                     <button
                       type="button"
                       onClick={() => { seek(line.start / 1000); setAutoScroll(true); }}
-                      className={`${className} block w-full text-left hover:text-white`}
+                      className={`${className} block w-full text-left hover:text-zinc-50`}
                     >
                       {line.value || ' '}
                     </button>

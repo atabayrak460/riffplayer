@@ -33,12 +33,12 @@ export function DeviceNameSection() {
           value={value}
           maxLength={40}
           onChange={(e) => { setValue(e.target.value); setSaved(false); }}
-          className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand"
+          className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-50 focus:outline-none focus:border-brand"
         />
         <button
           type="submit"
           disabled={!changed}
-          className="bg-brand hover:bg-brand-dim text-white text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+          className="bg-brand hover:bg-brand-dim text-on-brand text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
         >
           Save
         </button>

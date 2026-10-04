@@ -39,14 +39,14 @@ export function DownloadTargetModal() {
     <Modal onClose={cancelPendingRequest} label="Download to…" className="p-6 w-full max-w-sm">
       {step === 'choose' ? (
         <>
-          <h2 className="text-white font-semibold mb-1">Download to…</h2>
+          <h2 className="text-zinc-50 font-semibold mb-1">Download to…</h2>
           <p className="text-xs text-zinc-400 mb-4">Choose where downloads should go.</p>
           <div className="space-y-2">
             <button
               onClick={() => choose('app')}
               className="w-full text-left bg-zinc-900 hover:bg-zinc-700 border border-zinc-700 rounded-lg p-3 transition-colors"
             >
-              <p className="text-sm font-medium text-white">In RiffPlayer</p>
+              <p className="text-sm font-medium text-zinc-50">In RiffPlayer</p>
               <p className="text-xs text-zinc-400 mt-0.5">
                 Play offline inside the app, from the Downloaded tab.
               </p>
@@ -61,7 +61,7 @@ export function DownloadTargetModal() {
               onClick={() => choose('device')}
               className="w-full text-left bg-zinc-900 hover:bg-zinc-700 border border-zinc-700 rounded-lg p-3 transition-colors"
             >
-              <p className="text-sm font-medium text-white">To this device</p>
+              <p className="text-sm font-medium text-zinc-50">To this device</p>
               <p className="text-xs text-zinc-400 mt-0.5">
                 Save as a plain file in your Downloads folder.
               </p>
@@ -76,20 +76,20 @@ export function DownloadTargetModal() {
         </>
       ) : (
         <>
-          <h2 className="text-white font-semibold mb-1">Remember this choice?</h2>
+          <h2 className="text-zinc-50 font-semibold mb-1">Remember this choice?</h2>
           <p className="text-xs text-zinc-400 mb-4">
             Applies only on this device — you can change it later in Settings.
           </p>
           <div className="flex gap-2">
             <button
               onClick={() => finish(true)}
-              className="flex-1 bg-brand hover:bg-brand-dim text-white text-sm px-4 py-2 rounded-lg transition-colors"
+              className="flex-1 bg-brand hover:bg-brand-dim text-on-brand text-sm px-4 py-2 rounded-lg transition-colors"
             >
               Yes, always use this
             </button>
             <button
               onClick={() => finish(false)}
-              className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+              className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-zinc-50 text-sm px-4 py-2 rounded-lg transition-colors"
             >
               Just this once
             </button>

@@ -37,20 +37,20 @@ export function LibrariesPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-white">Music Libraries</h2>
-        <button onClick={() => setAdding(v => !v)} className="bg-brand hover:bg-brand-dim text-white text-sm px-4 py-2 rounded-lg transition-colors">+ Add library</button>
+        <h2 className="text-xl font-semibold text-zinc-50">Music Libraries</h2>
+        <button onClick={() => setAdding(v => !v)} className="bg-brand hover:bg-brand-dim text-on-brand text-sm px-4 py-2 rounded-lg transition-colors">+ Add library</button>
       </div>
 
       {adding && (
         <form onSubmit={(e) => { e.preventDefault(); addMut.mutate(form); }} className="bg-zinc-800 rounded-lg p-4 mb-4 space-y-3">
           <h3 className="text-sm font-medium text-zinc-300">New library</h3>
           <div className="grid grid-cols-2 gap-3">
-            <input placeholder="Name (e.g. Music)" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required className="bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand" />
-            <input placeholder="Path (e.g. /music)" value={form.path} onChange={e => setForm(p => ({ ...p, path: e.target.value }))} required className="bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand" />
+            <input placeholder="Name (e.g. Music)" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required className="bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-50 focus:outline-none focus:border-brand" />
+            <input placeholder="Path (e.g. /music)" value={form.path} onChange={e => setForm(p => ({ ...p, path: e.target.value }))} required className="bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-50 focus:outline-none focus:border-brand" />
           </div>
           <div className="flex gap-2">
-            <button type="submit" disabled={addMut.isPending} className="bg-brand hover:bg-brand-dim text-white text-sm px-4 py-1.5 rounded transition-colors disabled:opacity-60">Add</button>
-            <button type="button" onClick={() => setAdding(false)} className="text-zinc-400 hover:text-white text-sm px-3 py-1.5">Cancel</button>
+            <button type="submit" disabled={addMut.isPending} className="bg-brand hover:bg-brand-dim text-on-brand text-sm px-4 py-1.5 rounded transition-colors disabled:opacity-60">Add</button>
+            <button type="button" onClick={() => setAdding(false)} className="text-zinc-400 hover:text-zinc-50 text-sm px-3 py-1.5">Cancel</button>
           </div>
         </form>
       )}
@@ -64,14 +64,14 @@ export function LibrariesPage() {
           {libraries.map(lib => (
             <div key={lib.id} className="flex items-center gap-4 px-4 py-3 bg-zinc-800/40 rounded-lg group">
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white">{lib.name}</p>
+                <p className="text-sm font-medium text-zinc-50">{lib.name}</p>
                 <p className="text-xs text-zinc-400 font-mono">{lib.path}</p>
               </div>
               <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={() => scan(lib.id)}
                   disabled={scanning === lib.id || lib.scanning}
-                  className="text-xs text-zinc-300 hover:text-white border border-zinc-600 px-3 py-1 rounded transition-colors disabled:opacity-50"
+                  className="text-xs text-zinc-300 hover:text-zinc-50 border border-zinc-600 px-3 py-1 rounded transition-colors disabled:opacity-50"
                 >
                   {scanning === lib.id || lib.scanning ? 'Scanning…' : '⟳ Scan'}
                 </button>

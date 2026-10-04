@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { getAllSongs, getLibraryStats } from '../api/subsonic';
+import { getAllSongs, getGenres, getLibraryStats, type AllSongsSort, type QualityFilter } from '../api/subsonic';
+import { QualityFilterSelect } from '../components/QualityFilterSelect';
 import { SongRow } from '../components/SongRow';
 import { AllSongsCover } from '../components/StockCovers';
 
@@ -14,7 +15,17 @@ const ESTIMATED_ROW_HEIGHT = 56;
 // scroll or keyboard nav doesn't show a blank flash before rows mount.
 const OVERSCAN = 8;
 
+const SORT_OPTIONS: { value: AllSongsSort; label: string }[] = [
+  { value: 'title', label: 'Title (A–Z)' },
+  { value: 'added_desc', label: 'Recently added' },
+  { value: 'added_asc', label: 'Oldest added' },
+];
+
 export function AllSongsPage() {
+  const [genre, setGenre] = useState('');
+  const [sort, setSort] = useState<AllSongsSort>('title');
+  const [quality, setQuality] = useState<QualityFilter>('');
+  const { data: genres = [] } = useQuery({ queryKey: ['genres'], queryFn: getGenres });
   const {
     data,
     isLoading,
@@ -23,8 +34,8 @@ export function AllSongsPage() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['all-songs'],
-    queryFn: ({ pageParam }) => getAllSongs(pageParam, PAGE_SIZE),
+    queryKey: ['all-songs', genre, sort, quality],
+    queryFn: ({ pageParam }) => getAllSongs(pageParam, PAGE_SIZE, { genre: genre || undefined, sort, quality: quality || undefined }),
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
       lastPage.length === PAGE_SIZE ? allPages.length * PAGE_SIZE : undefined,
@@ -60,12 +71,40 @@ export function AllSongsPage() {
       <div className="flex items-center gap-4 mb-6 flex-shrink-0">
         <AllSongsCover className="w-16 h-16 rounded-lg shadow-lg flex-shrink-0" />
         <div>
-          <h1 className="text-2xl font-bold text-white">All Songs</h1>
+          <h1 className="text-2xl font-bold text-zinc-50">All Songs</h1>
           {stats && (
             <p className="text-sm text-zinc-400 mt-1">
               Every track in your library · {stats.trackCount.toLocaleString()} songs
             </p>
           )}
+        </div>
+        <div className="ml-auto flex items-center gap-2 text-sm">
+          <select
+            aria-label="Filter by genre"
+            value={genre}
+            onChange={(e) => setGenre(e.target.value)}
+            className="bg-zinc-800 text-zinc-200 rounded-md px-2 py-1.5 border border-zinc-700 max-w-[10rem]"
+          >
+            <option value="">All genres</option>
+            {genres.map((g) => (
+              <option key={g.value} value={g.value}>
+                {g.value} ({g.songCount})
+              </option>
+            ))}
+          </select>
+          <QualityFilterSelect value={quality} onChange={setQuality} />
+          <select
+            aria-label="Sort songs"
+            value={sort}
+            onChange={(e) => setSort(e.target.value as AllSongsSort)}
+            className="bg-zinc-800 text-zinc-200 rounded-md px-2 py-1.5 border border-zinc-700"
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -80,7 +119,9 @@ export function AllSongsPage() {
       {isError && <p className="text-red-400 text-sm">Failed to load songs.</p>}
 
       {!isLoading && !isError && songs.length === 0 && (
-        <p className="text-zinc-400 text-sm">No songs found. Try indexing your music library.</p>
+        <p className="text-zinc-400 text-sm">{genre || quality
+            ? 'No songs match these filters.'
+            : 'No songs found. Try indexing your music library.'}</p>
       )}
 
       {songs.length > 0 && (

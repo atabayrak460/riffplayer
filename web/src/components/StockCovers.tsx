@@ -157,7 +157,7 @@ export function DiscoverCover({ className }: CoverProps) {
           <stop offset="1" stopColor="#08070a" />
         </linearGradient>
         <linearGradient id={`${id}-grad`} x1="0" y1="0" x2="400" y2="400">
-          <stop offset="0" stopColor="#a78bfa" />
+          <stop offset="0" style={{ stopColor: 'rgb(var(--brand))' }} />
           <stop offset="1" stopColor="#22d3ee" />
         </linearGradient>
         <pattern id={`${id}-hatch`} width="40" height="40" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
@@ -169,14 +169,14 @@ export function DiscoverCover({ className }: CoverProps) {
       </defs>
       <rect width="400" height="400" fill={`url(#${id}-bg)`} />
       <circle cx="140" cy="260" r="100" fill="#22d3ee" opacity="0.2" filter={`url(#${id}-blur)`} />
-      <circle cx="280" cy="120" r="70" fill="#a78bfa" opacity="0.2" filter={`url(#${id}-blur)`} />
+      <circle cx="280" cy="120" r="70" style={{ fill: 'rgb(var(--brand))' }} opacity="0.2" filter={`url(#${id}-blur)`} />
       <polygon points="230,150 320,190 250,260" fill={`url(#${id}-grad)`} opacity="1" />
       <polygon points="120,120 175,100 190,150 135,165" fill={`url(#${id}-grad)`} opacity="0.85" />
       <polygon points="80,230 120,215 110,260" fill={`url(#${id}-grad)`} opacity="0.7" />
       <polygon points="300,280 340,300 305,330" fill={`url(#${id}-grad)`} opacity="0.6" />
       <polygon points="190,320 220,310 205,345" fill={`url(#${id}-grad)`} opacity="0.5" />
       <circle cx="95" cy="170" r="4" fill="#22d3ee" opacity="0.8" />
-      <circle cx="330" cy="230" r="4" fill="#a78bfa" opacity="0.8" />
+      <circle cx="330" cy="230" r="4" style={{ fill: 'rgb(var(--brand))' }} opacity="0.8" />
       <rect width="400" height="400" fill={`url(#${id}-hatch)`} />
     </svg>
   );
@@ -203,15 +203,15 @@ export function WrappedCover({ className }: CoverProps) {
       <circle cx="260" cy="290" r="90" fill="#fb923c" opacity="0.18" filter={`url(#${id}-blur)`} />
 
       <g transform="translate(140,330) rotate(10)"><polygon points="0,-26 22.6,13 -22.6,13" fill="#f472b6" opacity="0.9" /></g>
-      <g transform="translate(200,350) rotate(-15)"><polygon points="0,-30 26,15 -26,15" fill="#a78bfa" opacity="0.95" /></g>
+      <g transform="translate(200,350) rotate(-15)"><polygon points="0,-30 26,15 -26,15" style={{ fill: 'rgb(var(--brand))' }} opacity="0.95" /></g>
       <g transform="translate(260,325) rotate(20)"><polygon points="0,-24 20.8,12 -20.8,12" fill="#fb923c" opacity="0.9" /></g>
       <g transform="translate(110,270) rotate(40)"><polygon points="0,-20 17.3,10 -17.3,10" fill="#fb923c" opacity="0.85" /></g>
       <g transform="translate(180,260) rotate(-25)"><polygon points="0,-26 22.6,13 -22.6,13" fill="#f472b6" opacity="0.85" /></g>
-      <g transform="translate(250,250) rotate(15)"><polygon points="0,-22 19,11 -19,11" fill="#a78bfa" opacity="0.9" /></g>
+      <g transform="translate(250,250) rotate(15)"><polygon points="0,-22 19,11 -19,11" style={{ fill: 'rgb(var(--brand))' }} opacity="0.9" /></g>
       <g transform="translate(300,270) rotate(-10)"><polygon points="0,-18 15.6,9 -15.6,9" fill="#f472b6" opacity="0.8" /></g>
-      <g transform="translate(150,190) rotate(30)"><polygon points="0,-18 15.6,9 -15.6,9" fill="#a78bfa" opacity="0.75" /></g>
+      <g transform="translate(150,190) rotate(30)"><polygon points="0,-18 15.6,9 -15.6,9" style={{ fill: 'rgb(var(--brand))' }} opacity="0.75" /></g>
       <g transform="translate(230,175) rotate(-20)"><polygon points="0,-20 17.3,10 -17.3,10" fill="#fb923c" opacity="0.75" /></g>
-      <g transform="translate(90,200) rotate(50)"><polygon points="0,-14 12.1,7 -12.1,7" fill="#a78bfa" opacity="0.65" /></g>
+      <g transform="translate(90,200) rotate(50)"><polygon points="0,-14 12.1,7 -12.1,7" style={{ fill: 'rgb(var(--brand))' }} opacity="0.65" /></g>
       <g transform="translate(310,180) rotate(-35)"><polygon points="0,-16 13.9,8 -13.9,8" fill="#f472b6" opacity="0.65" /></g>
       <g transform="translate(200,110) rotate(5)"><polygon points="0,-16 13.9,8 -13.9,8" fill="#fb923c" opacity="0.6" /></g>
 
@@ -264,7 +264,7 @@ export function PlaylistCover({ className }: CoverProps) {
           <stop offset="1" stopColor="#08070a" />
         </linearGradient>
         <linearGradient id={`${id}-grad`} x1="0" y1="0" x2="400" y2="400">
-          <stop offset="0" stopColor="#a78bfa" />
+          <stop offset="0" style={{ stopColor: 'rgb(var(--brand))' }} />
           <stop offset="1" stopColor="#4c1d95" />
         </linearGradient>
         <pattern id={`${id}-hatch`} width="40" height="40" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
@@ -275,7 +275,7 @@ export function PlaylistCover({ className }: CoverProps) {
         </filter>
       </defs>
       <rect width="400" height="400" fill={`url(#${id}-bg)`} />
-      <circle cx="200" cy="200" r="120" fill="#a78bfa" opacity="0.18" filter={`url(#${id}-blur)`} />
+      <circle cx="200" cy="200" r="120" style={{ fill: 'rgb(var(--brand))' }} opacity="0.18" filter={`url(#${id}-blur)`} />
       <circle cx="150" cy="160" r="70" fill={`url(#${id}-grad)`} opacity="0.55" />
       <rect x="190" y="150" width="130" height="130" rx="14" fill={`url(#${id}-grad)`} opacity="0.8" transform="rotate(18 255 215)" />
       <polygon points="120,330 210,330 165,240" fill={`url(#${id}-grad)`} opacity="1" />

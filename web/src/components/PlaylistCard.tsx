@@ -63,7 +63,7 @@ export function PlaylistCard({ pl, onDelete }: Props) {
             title="Play"
             className="absolute bottom-2 right-2 w-10 h-10 bg-brand rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-150"
           >
-            <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-on-brand ml-0.5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M8 5.14v14l11-7-11-7z" />
             </svg>
           </button>
@@ -73,7 +73,7 @@ export function PlaylistCard({ pl, onDelete }: Props) {
       <div className="min-w-0">
         <Link
           to={`/playlists/${pl.id}`}
-          className="text-base font-semibold text-white hover:text-brand transition-colors line-clamp-1 block"
+          className="text-base font-semibold text-zinc-50 hover:text-brand transition-colors line-clamp-1 block"
         >
           {pl.name}
         </Link>

@@ -187,7 +187,7 @@ export function PlaylistDetailPage() {
           alt={playlist.name}
           fallback={<PlaylistCover className="w-full h-full" />}
           shape="square"
-          hasCover={!!playlist.coverArt}
+          hasCover={!!playlist.coverArt?.startsWith('pl-')}
           uploadTitle="Upload cover"
           removeTitle="Reset to default cover"
           onUpload={(file) => coverMutation.mutate(file)}
@@ -206,14 +206,14 @@ export function PlaylistDetailPage() {
                 autoFocus
                 value={nameValue}
                 onChange={(e) => setNameValue(e.target.value)}
-                className="bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-white text-3xl font-bold focus:outline-none focus:border-brand"
+                className="bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-zinc-50 text-3xl font-bold focus:outline-none focus:border-brand"
               />
               <button type="submit" className="text-brand text-sm self-center">Save</button>
               <button type="button" onClick={() => setEditingName(false)} className="text-zinc-400 text-sm self-center">Cancel</button>
             </form>
           ) : (
             <h1
-              className="text-3xl font-bold text-white cursor-pointer hover:text-brand transition-colors mt-1 truncate"
+              className="text-3xl font-bold text-zinc-50 cursor-pointer hover:text-brand transition-colors mt-1 truncate"
               onClick={() => { setNameValue(playlist.name); setEditingName(true); }}
               title="Click to rename"
             >
@@ -235,7 +235,7 @@ export function PlaylistDetailPage() {
                 value={descriptionValue}
                 onChange={(e) => setDescriptionValue(e.target.value)}
                 placeholder="Add a description…"
-                className="bg-zinc-900/50 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-brand flex-1 min-h-0"
+                className="bg-zinc-900/50 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-50 text-sm resize-none focus:outline-none focus:border-brand flex-1 min-h-0"
               />
               <div className="flex gap-2">
                 <button type="submit" className="text-brand text-sm">Save</button>
@@ -260,7 +260,7 @@ export function PlaylistDetailPage() {
         <button
           onClick={() => playQueue(displayedSongs)}
           disabled={!songs.length}
-          className="bg-brand hover:bg-brand-dim text-white text-sm font-medium px-5 py-2 rounded-full transition-colors disabled:opacity-50"
+          className="bg-brand hover:bg-brand-dim text-on-brand text-sm font-medium px-5 py-2 rounded-full transition-colors disabled:opacity-50"
         >
           Play
         </button>
@@ -289,7 +289,7 @@ export function PlaylistDetailPage() {
               key={mode}
               onClick={() => setSortMode(mode)}
               className={`text-xs px-2.5 py-1 rounded-full transition-colors ${
-                sortMode === mode ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                sortMode === mode ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:text-zinc-50 hover:bg-zinc-800'
               }`}
             >
               {label}

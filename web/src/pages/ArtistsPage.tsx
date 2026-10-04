@@ -12,7 +12,7 @@ export function ArtistsPage() {
   if (isLoading) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-bold text-white mb-6">Artists</h1>
+        <h1 className="text-2xl font-bold text-zinc-50 mb-6">Artists</h1>
         <div className="space-y-2">
           {Array.from({ length: 20 }).map((_, i) => (
             <div key={i} className="h-10 bg-zinc-800 rounded animate-pulse" />
@@ -28,7 +28,7 @@ export function ArtistsPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold text-white mb-6">Artists</h1>
+      <h1 className="text-2xl font-bold text-zinc-50 mb-6">Artists</h1>
       {indexes.map((index) => (
         <div key={index.name} className="mb-6">
           <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-2 px-1">
@@ -48,7 +48,7 @@ export function ArtistsPage() {
                   alt={artist.name}
                 />
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-white group-hover:text-brand transition-colors truncate">
+                  <p className="text-sm font-medium text-zinc-50 group-hover:text-brand transition-colors truncate">
                     {artist.name}
                   </p>
                   <p className="text-xs text-zinc-400">

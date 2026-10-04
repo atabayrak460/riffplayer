@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AlbumsPage } from './AlbumsPage';
+import { MemoryRouter } from 'react-router-dom';
+import { useUiStyleStore } from '../store/uiStyle';
 import * as subsonic from '../api/subsonic';
 import type { Album } from '../api/types';
 
@@ -16,13 +18,16 @@ const albums = [{ id: '1', name: 'Alpha' }, { id: '2', name: 'Beta' }] as Album[
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={client}>
-      <AlbumsPage />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={client}>
+        <AlbumsPage />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 
 beforeEach(() => {
+  useUiStyleStore.setState({ style: 'default' });
   vi.restoreAllMocks();
   vi.spyOn(subsonic, 'getAlbumList').mockResolvedValue(albums);
 });
@@ -33,13 +38,13 @@ describe('AlbumsPage', () => {
 
     expect(await screen.findAllByTestId('album')).toHaveLength(2);
     expect(subsonic.getAlbumList).toHaveBeenCalledWith('newest', { size: 100 });
-    expect(screen.getByRole('combobox')).toHaveValue('newest');
+    expect(screen.getByRole('combobox', { name: 'Sort albums' })).toHaveValue('newest');
   });
 
   it('offers every sort order', () => {
     renderPage();
 
-    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+    expect(within(screen.getByRole('combobox', { name: 'Sort albums' })).getAllByRole('option').map((o) => o.textContent)).toEqual([
       'Recently Added', 'Recently Played', 'Most Played', 'Starred', 'A–Z', 'By Artist', 'Random',
     ]);
   });
@@ -55,7 +60,7 @@ describe('AlbumsPage', () => {
     renderPage();
     await screen.findAllByTestId('album');
 
-    await userEvent.selectOptions(screen.getByRole('combobox'), label);
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort albums' }), label);
 
     await waitFor(() => expect(subsonic.getAlbumList).toHaveBeenCalledWith(type, { size: 100 }));
   });
@@ -80,5 +85,40 @@ describe('AlbumsPage', () => {
     renderPage();
 
     expect(await screen.findByText(/no albums found/i)).toBeInTheDocument();
+  });
+
+  describe('view', () => {
+    it('is a grid by default, and Cover Flow on request', async () => {
+      renderPage();
+      expect(await screen.findAllByTestId('album')).toHaveLength(2);
+      expect(screen.getByRole('button', { name: 'Grid' })).toHaveAttribute('aria-pressed', 'true');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cover Flow' }));
+
+      expect(screen.queryByTestId('album')).not.toBeInTheDocument();
+      expect(screen.getByRole('group', { name: /Cover Flow/ })).toBeInTheDocument();
+    });
+
+    it('opens as Cover Flow in the iPod Classic style, and can still go back to the grid', async () => {
+      useUiStyleStore.setState({ style: 'ipod' });
+      renderPage();
+      expect(await screen.findByRole('group', { name: /Cover Flow/ })).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Grid' }));
+      expect(await screen.findAllByTestId('album')).toHaveLength(2);
+    });
+  });
+
+  describe('quality filter', () => {
+    it('asks the server only for Hi-Res albums when chosen, and resets to all', async () => {
+      renderPage();
+      await screen.findAllByTestId('album');
+
+      await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Filter by audio quality' }), 'hires');
+      await waitFor(() => expect(subsonic.getAlbumList).toHaveBeenLastCalledWith('newest', { size: 100, quality: 'hires' }));
+
+      await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Filter by audio quality' }), '');
+      await waitFor(() => expect(subsonic.getAlbumList).toHaveBeenLastCalledWith('newest', { size: 100 }));
+    });
   });
 });

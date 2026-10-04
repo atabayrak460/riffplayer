@@ -22,7 +22,7 @@ export function AdminPage() {
               `px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
                 isActive
                   ? 'border-brand text-brand'
-                  : 'border-transparent text-zinc-400 hover:text-white'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-50'
               }`
             }
           >

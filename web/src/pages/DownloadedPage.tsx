@@ -75,7 +75,7 @@ export function DownloadedPage() {
                         fallback={<PlaylistCover className="w-full h-full" />}
                       />
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-white group-hover:text-brand transition-colors truncate">
+                        <p className="text-sm font-medium text-zinc-50 group-hover:text-brand transition-colors truncate">
                           {pl.name}
                         </p>
                         <p className="text-xs text-zinc-400">

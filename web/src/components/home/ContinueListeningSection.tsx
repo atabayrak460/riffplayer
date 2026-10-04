@@ -29,7 +29,7 @@ export function ContinueListeningSection() {
 
   return (
     <section>
-      <h2 className="text-xl font-bold text-white mb-4">Continue Listening</h2>
+      <h2 className="text-xl font-bold text-zinc-50 mb-4">Continue Listening</h2>
 
       {lastPlayed && (
         <button
@@ -44,7 +44,7 @@ export function ContinueListeningSection() {
           />
           <div className="min-w-0 flex-1">
             <p className="text-[11px] uppercase tracking-widest text-zinc-500">Jump back in</p>
-            <p className="text-white font-semibold truncate group-hover:text-brand transition-colors">
+            <p className="text-zinc-50 font-semibold truncate group-hover:text-brand transition-colors">
               {lastPlayed.title}
             </p>
             <p className="text-sm text-zinc-400 truncate">

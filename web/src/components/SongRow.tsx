@@ -127,7 +127,7 @@ export function SongRow({
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className={`text-xs font-medium truncate ${isCurrent ? 'text-brand' : 'text-white'}`}>
+          <p className={`text-xs font-medium truncate ${isCurrent ? 'text-brand' : 'text-zinc-50'}`}>
             {song.title}
           </p>
           {condensedSubtitle && <p className="text-[11px] text-zinc-500 truncate">{condensedSubtitle}</p>}
@@ -140,7 +140,7 @@ export function SongRow({
             openAt(e, menuItems);
           }}
           title="More options"
-          className="text-zinc-500 hover:text-white transition-colors flex-shrink-0"
+          className="text-zinc-500 hover:text-zinc-50 transition-colors flex-shrink-0"
         >
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
             <path d={ICONS.more} />
@@ -187,7 +187,7 @@ export function SongRow({
 
       {/* Title + artist */}
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium truncate ${isCurrent ? 'text-brand' : 'text-white'}`}>
+        <p className={`text-sm font-medium truncate ${isCurrent ? 'text-brand' : 'text-zinc-50'}`}>
           {song.title}
         </p>
         {showAlbum && (
@@ -215,7 +215,7 @@ export function SongRow({
             openAt(e, menuItems);
           }}
           title="More options"
-          className="text-zinc-400 hover:text-white transition-colors flex-shrink-0"
+          className="text-zinc-400 hover:text-zinc-50 transition-colors flex-shrink-0"
         >
           <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
             <path d={ICONS.more} />

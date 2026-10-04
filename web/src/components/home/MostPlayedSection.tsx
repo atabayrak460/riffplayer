@@ -21,7 +21,7 @@ export function MostPlayedSection() {
 
   return (
     <section className="space-y-6">
-      <h2 className="text-xl font-bold text-white">Most Played</h2>
+      <h2 className="text-xl font-bold text-zinc-50">Most Played</h2>
 
       {topSongs.length > 0 && (
         <HomeRow title="Your most played" viewAllTo="/most-played">

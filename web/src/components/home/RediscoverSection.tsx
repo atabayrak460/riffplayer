@@ -10,7 +10,7 @@ export function RediscoverSection() {
 
   return (
     <section>
-      <h2 className="text-xl font-bold text-white">Rediscover</h2>
+      <h2 className="text-xl font-bold text-zinc-50">Rediscover</h2>
       <p className="text-sm text-zinc-400 mt-1 mb-4">You might have forgotten these.</p>
       <HomeRow title="From your library" viewAllTo="/songs">
         {songs.map((song) => (

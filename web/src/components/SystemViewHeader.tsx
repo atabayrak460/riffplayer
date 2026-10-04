@@ -71,7 +71,7 @@ export function SystemViewHeader({ viewKey, title, defaultDescription, StockCove
       />
 
       <div className="flex flex-col flex-1 min-w-0 h-56">
-        <h1 className="text-3xl font-bold text-white">{title}</h1>
+        <h1 className="text-3xl font-bold text-zinc-50">{title}</h1>
         {meta && <div className="text-sm text-zinc-400 mt-1.5">{meta}</div>}
 
         {editingDescription ? (
@@ -84,7 +84,7 @@ export function SystemViewHeader({ viewKey, title, defaultDescription, StockCove
               value={descriptionValue}
               onChange={(e) => setDescriptionValue(e.target.value)}
               placeholder={defaultDescription}
-              className="bg-zinc-900/50 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-brand flex-1 min-h-0"
+              className="bg-zinc-900/50 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-50 text-sm resize-none focus:outline-none focus:border-brand flex-1 min-h-0"
             />
             <div className="flex gap-2">
               <button type="submit" className="text-brand text-sm">Save</button>

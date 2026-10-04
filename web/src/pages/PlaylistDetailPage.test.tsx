@@ -289,6 +289,12 @@ describe('PlaylistDetailPage — delete, download, cover', () => {
     expect(await screen.findByText('has cover')).toBeInTheDocument();
   });
 
+  it('does not count the generated mosaic cover as an uploaded one (no "reset" offered)', async () => {
+    vi.spyOn(subsonic, 'getPlaylist').mockResolvedValue(playlist({ coverArt: 'plm-p1-1.2.3.4' }));
+    renderPage();
+    expect(await screen.findByText('no cover')).toBeInTheDocument();
+  });
+
   it('shows the upload error message', async () => {
     vi.spyOn(subsonic, 'uploadPlaylistCover').mockRejectedValue(new Error('Image too large'));
     renderPage();

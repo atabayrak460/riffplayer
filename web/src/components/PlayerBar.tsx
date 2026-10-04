@@ -14,6 +14,7 @@ import { ContextMenu, useContextMenu, type ContextMenuItem } from './ContextMenu
 import { AddToPlaylistDialog } from './AddToPlaylistDialog';
 import { SongInfoDialog } from './SongInfoDialog';
 import { DevicePicker } from './DevicePicker';
+import { QualityBadge } from './QualityBadge';
 import { RemoteLabel } from './RemoteLabel';
 import { useConnectStore } from '../store/connect';
 
@@ -134,7 +135,7 @@ export function PlayerBar() {
     <button
       onClick={(e) => openAt(e, menuItems)}
       title="More options"
-      className="text-zinc-400 hover:text-white transition-colors flex-shrink-0"
+      className="text-zinc-400 hover:text-zinc-50 transition-colors flex-shrink-0"
     >
       <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
         <path d={ICONS.more} />
@@ -147,14 +148,14 @@ export function PlayerBar() {
       <button
         onClick={toggleShuffle}
         title="Shuffle"
-        className={`transition-colors ${shuffle ? 'text-brand' : 'text-zinc-400 hover:text-white'}`}
+        className={`transition-colors ${shuffle ? 'text-brand' : 'text-zinc-400 hover:text-zinc-50'}`}
       >
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
           <path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z" />
         </svg>
       </button>
 
-      <button onClick={prev} title="Previous" className="text-zinc-400 hover:text-white transition-colors">
+      <button onClick={prev} title="Previous" className="text-zinc-400 hover:text-zinc-50 transition-colors">
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
           <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" />
         </svg>
@@ -163,20 +164,20 @@ export function PlayerBar() {
       <button
         onClick={togglePlay}
         title={playing ? 'Pause' : 'Play'}
-        className="w-9 h-9 bg-white rounded-full flex items-center justify-center hover:scale-105 transition-transform"
+        className="w-9 h-9 bg-zinc-50 rounded-full flex items-center justify-center hover:scale-105 transition-transform"
       >
         {playing ? (
-          <svg className="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 text-zinc-950" fill="currentColor" viewBox="0 0 24 24">
             <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
           </svg>
         ) : (
-          <svg className="w-4 h-4 text-black ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 text-zinc-950 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
             <path d="M8 5.14v14l11-7-11-7z" />
           </svg>
         )}
       </button>
 
-      <button onClick={next} title="Next" className="text-zinc-400 hover:text-white transition-colors">
+      <button onClick={next} title="Next" className="text-zinc-400 hover:text-zinc-50 transition-colors">
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
           <path d="M6 18l8.5-6L6 6v12zm2.5-6 5.5 4V8z M16 6h2v12h-2z" />
         </svg>
@@ -186,14 +187,14 @@ export function PlayerBar() {
         onClick={toggleRepeat}
         title={`Repeat: ${repeatMode}`}
         className={`relative transition-colors ${
-          repeatMode !== 'off' ? 'text-brand' : 'text-zinc-400 hover:text-white'
+          repeatMode !== 'off' ? 'text-brand' : 'text-zinc-400 hover:text-zinc-50'
         }`}
       >
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
           <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v3z" />
         </svg>
         {repeatMode === 'one' && (
-          <span className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-brand text-black text-[8px] font-bold leading-none flex items-center justify-center">
+          <span className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-brand text-on-brand text-[8px] font-bold leading-none flex items-center justify-center">
             1
           </span>
         )}
@@ -218,7 +219,7 @@ export function PlayerBar() {
         step={0.5}
         value={currentTime}
         onChange={(e) => seek(Number(e.target.value))}
-        style={{ background: `linear-gradient(to right, #a78bfa ${seekPct}%, #3f3f46 ${seekPct}%)` }}
+        style={{ background: `linear-gradient(to right, rgb(var(--brand)) ${seekPct}%, rgb(var(--c-700)) ${seekPct}%)` }}
         className="flex-1 cursor-pointer"
       />
       <span className="text-xs text-zinc-400 w-8 tabular-nums">{formatTime(duration)}</span>
@@ -240,7 +241,7 @@ export function PlayerBar() {
         disabled={remoteUnreachable}
         title={remoteUnreachable ? 'That device isn\'t reachable right now' : remoteActive ? 'Volume of the device that is playing' : undefined}
         onChange={(e) => setVolume(Number(e.target.value))}
-        style={{ background: `linear-gradient(to right, #a78bfa ${volumePct}%, #3f3f46 ${volumePct}%)` }}
+        style={{ background: `linear-gradient(to right, rgb(var(--brand)) ${volumePct}%, rgb(var(--c-700)) ${volumePct}%)` }}
         className={`w-20 ${remoteUnreachable ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
       />
     </div>
@@ -276,7 +277,7 @@ export function PlayerBar() {
           <div className="min-w-0">
             <Link
               to={`/albums/${currentSong.albumId}`}
-              className="text-sm font-medium text-white hover:text-brand transition-colors line-clamp-1 block"
+              className="text-sm font-medium text-zinc-50 hover:text-brand transition-colors line-clamp-1 block"
             >
               {currentSong.title}
             </Link>
@@ -286,6 +287,7 @@ export function PlayerBar() {
             >
               {currentSong.artist}
             </Link>
+            <QualityBadge song={currentSong} className="mt-0.5" />
             <RemoteLabel />
           </div>
           <StarButton starred={!!currentSong.starred} opts={{ id: currentSong.id }} />
@@ -304,13 +306,13 @@ export function PlayerBar() {
           <button
             onClick={toggleLyrics}
             title="Lyrics"
-            className={`transition-colors ${showLyrics ? 'text-brand' : 'text-zinc-400 hover:text-white'}`}
+            className={`transition-colors ${showLyrics ? 'text-brand' : 'text-zinc-400 hover:text-zinc-50'}`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
             </svg>
           </button>
-          <Link to="/queue" title="Queue" className="text-zinc-400 hover:text-white transition-colors">
+          <Link to="/queue" title="Queue" className="text-zinc-400 hover:text-zinc-50 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h10M4 18h7" />
             </svg>
@@ -333,17 +335,17 @@ export function PlayerBar() {
               alt={currentSong.title}
             />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-white truncate">{currentSong.title}</p>
+              <p className="text-sm font-medium text-zinc-50 truncate">{currentSong.title}</p>
               <p className="text-xs text-zinc-400 truncate">{currentSong.artist}</p>
             </div>
           </button>
           <button onClick={togglePlay} title={playing ? 'Pause' : 'Play'} className="flex-shrink-0 p-1">
             {playing ? (
-              <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-7 h-7 text-zinc-50" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
               </svg>
             ) : (
-              <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-7 h-7 text-zinc-50" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5.14v14l11-7-11-7z" />
               </svg>
             )}
@@ -373,7 +375,7 @@ export function PlayerBar() {
       {mobileExpanded && (
         <div data-lyrics-keep-open data-testid="mobile-expanded-sheet" className="fixed inset-0 bg-zinc-950 z-50 flex flex-col">
           <div className="flex items-center justify-end px-4 pt-[calc(env(safe-area-inset-top)+12px)] pb-2 flex-shrink-0">
-            <button onClick={() => setMobileExpanded(false)} title="Close" className="text-zinc-400 hover:text-white transition-colors">
+            <button onClick={() => setMobileExpanded(false)} title="Close" className="text-zinc-400 hover:text-zinc-50 transition-colors">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
               </svg>
@@ -420,7 +422,7 @@ export function PlayerBar() {
                     <Link
                       to={`/albums/${currentSong.albumId}`}
                       onClick={() => setMobileExpanded(false)}
-                      className="text-base font-semibold text-white line-clamp-1 block"
+                      className="text-base font-semibold text-zinc-50 line-clamp-1 block"
                     >
                       {currentSong.title}
                     </Link>
@@ -455,7 +457,7 @@ export function PlayerBar() {
               <button
                 onClick={toggleLyrics}
                 className={`flex items-center gap-2 text-sm transition-colors ${
-                  showLyrics ? 'text-brand' : 'text-zinc-400 hover:text-white'
+                  showLyrics ? 'text-brand' : 'text-zinc-400 hover:text-zinc-50'
                 }`}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -466,7 +468,7 @@ export function PlayerBar() {
               <Link
                 to="/queue"
                 onClick={() => setMobileExpanded(false)}
-                className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
+                className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-50 transition-colors"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h10M4 18h7" />

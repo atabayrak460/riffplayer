@@ -65,7 +65,7 @@ export function DevicePicker({ className = '' }: { className?: string }) {
         title="Connect to a device"
         aria-label="Connect to a device"
         aria-expanded={open}
-        className={`transition-colors ${remoteActive ? 'text-brand' : 'text-zinc-400 hover:text-white'}`}
+        className={`transition-colors ${remoteActive ? 'text-brand' : 'text-zinc-400 hover:text-zinc-50'}`}
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25" />
@@ -102,7 +102,7 @@ export function DevicePicker({ className = '' }: { className?: string }) {
               >
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${d.active && d.online ? 'bg-brand' : d.online ? 'bg-zinc-500' : 'bg-zinc-700'}`} />
                 <span className="min-w-0 flex-1">
-                  <span className={`block text-sm truncate ${d.active && d.online ? 'text-brand font-medium' : 'text-white'}`}>{d.name}</span>
+                  <span className={`block text-sm truncate ${d.active && d.online ? 'text-brand font-medium' : 'text-zinc-50'}`}>{d.name}</span>
                   <span className="block text-xs text-zinc-400 truncate">{subtitle(d, thisId)}</span>
                 </span>
                 {isThis && !d.active && remoteActive && (

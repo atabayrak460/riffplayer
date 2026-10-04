@@ -53,7 +53,7 @@ export function FavoritesPage() {
                   className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-zinc-800 transition-colors group"
                 >
                   <CoverArt id={artist.coverArt} size={48} className="w-10 h-10 rounded-full object-cover" alt={artist.name} />
-                  <p className="text-sm font-medium text-white group-hover:text-brand transition-colors">{artist.name}</p>
+                  <p className="text-sm font-medium text-zinc-50 group-hover:text-brand transition-colors">{artist.name}</p>
                 </Link>
               ))}
             </div>

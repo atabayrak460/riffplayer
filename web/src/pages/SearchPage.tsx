@@ -23,7 +23,7 @@ export function SearchPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold text-white mb-6">Search</h1>
+      <h1 className="text-2xl font-bold text-zinc-50 mb-6">Search</h1>
 
       <form onSubmit={onSubmit} className="flex gap-2 mb-8 max-w-xl">
         <input
@@ -32,11 +32,11 @@ export function SearchPage() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Artists, albums, songs…"
           autoFocus
-          className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-brand"
+          className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-zinc-50 placeholder-zinc-500 focus:outline-none focus:border-brand"
         />
         <button
           type="submit"
-          className="bg-brand hover:bg-brand-dim text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
+          className="bg-brand hover:bg-brand-dim text-on-brand text-sm font-medium px-5 py-2 rounded-lg transition-colors"
         >
           Search
         </button>
@@ -57,7 +57,7 @@ export function SearchPage() {
                     className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-zinc-800 transition-colors group"
                   >
                     <CoverArt id={artist.coverArt} size={48} className="w-10 h-10 rounded-full object-cover" alt={artist.name} />
-                    <p className="text-sm text-white group-hover:text-brand transition-colors">{artist.name}</p>
+                    <p className="text-sm text-zinc-50 group-hover:text-brand transition-colors">{artist.name}</p>
                   </Link>
                 ))}
               </div>

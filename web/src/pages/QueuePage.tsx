@@ -75,7 +75,7 @@ function QueueItem({ song, index, isCurrent, canRemove = true, onRemove, onPlay 
       />
 
       <div className="flex-1 min-w-0 cursor-pointer" onDoubleClick={onPlay}>
-        <p className={`text-sm font-medium truncate ${isCurrent ? 'text-brand' : 'text-white'}`}>
+        <p className={`text-sm font-medium truncate ${isCurrent ? 'text-brand' : 'text-zinc-50'}`}>
           {song.title}
         </p>
         <p className="text-xs text-zinc-400 truncate">{song.artist}</p>
@@ -131,7 +131,7 @@ export function QueuePage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Queue</h1>
+          <h1 className="text-2xl font-bold text-zinc-50">Queue</h1>
           {remoteActive && remoteDevice && <p className="text-xs text-brand">On {remoteDevice.name}</p>}
         </div>
         {queue.length > 0 && !remoteActive && (

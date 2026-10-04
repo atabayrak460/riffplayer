@@ -20,7 +20,7 @@ export function WrappedPreviewSection() {
 
   return (
     <section>
-      <h2 className="text-xl font-bold text-white mb-4">Wrapped preview</h2>
+      <h2 className="text-xl font-bold text-zinc-50 mb-4">Wrapped preview</h2>
       <Link
         to="/wrapped"
         className="group flex items-center gap-4 bg-zinc-800/60 hover:bg-zinc-800 rounded-xl p-3 pr-5 transition-colors max-w-md"
@@ -28,7 +28,7 @@ export function WrappedPreviewSection() {
         <WrappedCover className="w-16 h-16 rounded-lg shadow-lg flex-shrink-0" />
         <div className="min-w-0 flex-1">
           <p className="text-[11px] uppercase tracking-widest text-zinc-500">Your {year} Wrapped</p>
-          <p className="text-white font-semibold truncate group-hover:text-brand transition-colors">
+          <p className="text-zinc-50 font-semibold truncate group-hover:text-brand transition-colors">
             {headline}
           </p>
           <p className="text-sm text-zinc-400">

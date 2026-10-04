@@ -19,7 +19,7 @@ export function ArtistTracksSection({ song }: { song: Song }) {
         {others.length > CAP && (
           <Link
             to={`/artists/${song.artistId}?tab=songs`}
-            className="text-xs text-zinc-400 hover:text-white transition-colors"
+            className="text-xs text-zinc-400 hover:text-zinc-50 transition-colors"
           >
             See all
           </Link>

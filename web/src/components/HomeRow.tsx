@@ -32,7 +32,7 @@ export function HomeRow({ title, viewAllTo, children }: Props) {
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-500">{title}</h3>
         {viewAllTo && (
-          <Link to={viewAllTo} className="text-xs text-zinc-400 hover:text-white transition-colors">
+          <Link to={viewAllTo} className="text-xs text-zinc-400 hover:text-zinc-50 transition-colors">
             See all
           </Link>
         )}

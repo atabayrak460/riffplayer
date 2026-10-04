@@ -3,8 +3,47 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  /* ── Theme tokens ─────────────────────────────────────────────────────────
+     RGB triples (so Tailwind can add alpha). Default = dark. `data-theme` on
+     <html> is set by store/theme.ts (and by an inline script in index.html
+     before first paint). Palette: amber accent on deep navy / warm cream —
+     chosen to look unlike Spotify green, Apple red, Tidal teal, Plex orange. */
+  :root,
+  :root[data-theme='dark'] {
     color-scheme: dark;
+    --c-950: 8 14 26;
+    --c-900: 13 21 36;
+    --c-800: 21 33 54;
+    --c-700: 33 49 77;
+    --c-600: 50 69 102;
+    --c-500: 108 128 160;
+    --c-400: 140 156 184;
+    --c-300: 180 192 212;
+    --c-200: 211 219 232;
+    --c-100: 232 236 243;
+    --c-50: 244 246 250;
+    --brand: 245 165 36;
+    --brand-dim: 217 119 6;
+    --on-brand: 8 14 26;
+    --sea: 79 166 224;
+  }
+  :root[data-theme='light'] {
+    color-scheme: light;
+    --c-950: 250 247 241;
+    --c-900: 243 238 228;
+    --c-800: 232 225 211;
+    --c-700: 214 205 187;
+    --c-600: 188 177 156;
+    --c-500: 120 110 94;
+    --c-400: 92 84 70;
+    --c-300: 66 60 50;
+    --c-200: 44 40 33;
+    --c-100: 28 26 21;
+    --c-50: 17 16 13;
+    --brand: 160 69 8;
+    --brand-dim: 124 45 18;
+    --on-brand: 255 255 255;
+    --sea: 28 100 160;
   }
 
   * {
@@ -47,7 +86,7 @@
     width: 100%;
     height: 4px;
     border-radius: 9999px;
-    background: #3f3f46;
+    background: rgb(var(--c-700));
     cursor: pointer;
   }
   input[type='range']::-webkit-slider-runnable-track {
@@ -67,7 +106,7 @@
   input[type='range']::-moz-range-track {
     height: 4px;
     border-radius: 9999px;
-    background: #3f3f46;
+    background: rgb(var(--c-700));
   }
   input[type='range']::-moz-range-progress {
     height: 4px;
@@ -83,6 +122,13 @@
   }
 }
 
+/* Status colours tuned for the light theme (Tailwind's -400 shades are too pale on cream). */
+:root[data-theme='light'] .text-red-400,
+:root[data-theme='light'] .text-red-500 { color: #b91c1c; }
+:root[data-theme='light'] .text-green-400 { color: #15803d; }
+:root[data-theme='light'] .text-amber-300,
+:root[data-theme='light'] .text-amber-400 { color: #92400e; }
+
 @layer utilities {
   .line-clamp-1 {
     overflow: hidden;
@@ -96,4 +142,282 @@
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
   }
+}
+
+/* Logo intro (SplashScreen.tsx): the cat mark pops in, two sound-wave rings
+   ripple out behind it, then the whole overlay fades away. */
+@keyframes splash-logo-in {
+  0% { opacity: 0; transform: scale(0.82); filter: blur(8px); }
+  45% { opacity: 1; transform: scale(1.04); filter: blur(0); }
+  100% { opacity: 1; transform: scale(1); filter: blur(0); }
+}
+@keyframes splash-ring {
+  0% { opacity: 0.55; transform: scale(0.5); }
+  100% { opacity: 0; transform: scale(2.1); }
+}
+@keyframes splash-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* ═══ Interface style: iPod Classic ═══════════════════════════════════════════
+   A fixed light "aluminium + LCD" look (ignores the dark/light choice): the same
+   neutral ramp variables, re-pointed to cool silver-greys, with the iPod's
+   selection blue as the brand colour. Declared after the theme blocks so it wins. */
+:root[data-style='ipod'] {
+  color-scheme: light;
+  --c-950: 220 224 230; /* brushed aluminium: sidebar, player bar */
+  --c-900: 255 255 255; /* the "screen" */
+  --c-800: 238 241 246;
+  --c-700: 205 211 220;
+  --c-600: 176 184 196;
+  --c-500: 98 108 122;
+  --c-400: 74 82 96;
+  --c-300: 51 58 70;
+  --c-200: 31 36 45;
+  --c-100: 16 19 25;
+  --c-50: 0 0 0;
+  --brand: 31 107 194;
+  --brand-dim: 26 85 160;
+  --on-brand: 255 255 255;
+  --sea: 58 143 217;
+}
+:root[data-style='ipod'] body {
+  font-family: 'Myriad Pro', 'Lucida Grande', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+/* Chrome (sidebar, Now Playing panel, player bar, mobile top bar): brushed metal. */
+:root[data-style='ipod'] aside.bg-zinc-950,
+:root[data-style='ipod'] footer.bg-zinc-950,
+:root[data-style='ipod'] header.bg-zinc-950 {
+  background-image: linear-gradient(to bottom, #f6f8fb 0%, #dfe3ea 48%, #cfd5de 100%);
+  border-color: #aab2bf;
+  box-shadow: inset 0 1px 0 #fff;
+}
+/* Selection blue / primary buttons: the glossy Aqua-era sheen. */
+:root[data-style='ipod'] .bg-brand,
+:root[data-style='ipod'] .bg-brand\/50,
+:root[data-style='ipod'] .bg-brand\/70 {
+  background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.08) 50%, rgba(0, 0, 0, 0.1) 51%, rgba(255, 255, 255, 0.12) 100%);
+  text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.35);
+}
+/* Tighter corners, like the original UI's rounded rectangles. */
+:root[data-style='ipod'] .rounded-lg,
+:root[data-style='ipod'] .rounded-xl,
+:root[data-style='ipod'] .rounded-md {
+  border-radius: 5px;
+}
+/* The iPod's grey title strip on page headings. */
+:root[data-style='ipod'] main h1 {
+  text-shadow: 0 1px 0 #fff;
+  letter-spacing: -0.01em;
+}
+:root[data-style='ipod'] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(to right, #c3cad5, #9aa3b1);
+  border: 1px solid #8892a1;
+}
+
+/* Cover Flow (components/CoverFlow.tsx) */
+.coverflow-item {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: var(--cf-size);
+  height: var(--cf-size);
+  margin-left: calc(var(--cf-size) / -2);
+  transition: transform 0.4s cubic-bezier(0.2, 0.7, 0.2, 1), opacity 0.4s;
+  -webkit-box-reflect: below 2px linear-gradient(to bottom, transparent 62%, rgba(255, 255, 255, 0.28));
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .coverflow-item { transition: none; }
+}
+
+/* ═══ Interface style: Winamp (classic 2.x) ═══════════════════════════════════
+   Always dark: slate-metal chrome, a black "LED display" page with green text,
+   square bevelled controls. Same variable approach as the iPod block above. */
+:root[data-style='winamp'] {
+  color-scheme: dark;
+  --c-950: 28 29 40; /* metal chrome */
+  --c-900: 8 10 8; /* the LED display */
+  --c-800: 38 40 54;
+  --c-700: 72 76 98;
+  --c-600: 100 106 134;
+  --c-500: 0 150 0; /* dim LED */
+  --c-400: 0 190 0;
+  --c-300: 90 235 90;
+  --c-200: 140 245 140;
+  --c-100: 190 250 190;
+  --c-50: 40 245 40; /* bright LED green — primary text */
+  --brand: 255 255 255; /* "now playing" white, and silver buttons below */
+  --brand-dim: 190 192 210;
+  --on-brand: 12 12 20;
+  --sea: 70 110 255; /* Winamp's playlist-selection blue */
+}
+:root[data-style='winamp'] body {
+  font-family: Tahoma, 'Lucida Grande', Verdana, Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+:root[data-style='winamp'] aside.bg-zinc-950,
+:root[data-style='winamp'] footer.bg-zinc-950,
+:root[data-style='winamp'] header.bg-zinc-950 {
+  background-image: linear-gradient(to bottom, #3b3e55 0%, #2a2c3d 50%, #20222f 100%);
+  border-color: #0b0c12;
+  box-shadow: inset 1px 1px 0 #6f7494, inset -1px -1px 0 #0f1018;
+}
+/* Everything is square except sliders' round bits. */
+:root[data-style='winamp'] .rounded-md,
+:root[data-style='winamp'] .rounded-lg,
+:root[data-style='winamp'] .rounded-xl,
+:root[data-style='winamp'] .rounded,
+:root[data-style='winamp'] .rounded-full {
+  border-radius: 0;
+}
+/* Buttons: raised silver keys. */
+:root[data-style='winamp'] .bg-brand {
+  background-image: linear-gradient(to bottom, #e9eaf2 0%, #b4b6c8 48%, #8d90a8 100%);
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #4d5068, 0 0 0 1px #0b0c12;
+  text-shadow: none;
+  color: #0c0c14;
+}
+:root[data-style='winamp'] .bg-brand:active {
+  box-shadow: inset 1px 1px 0 #4d5068, inset -1px -1px 0 #fff, 0 0 0 1px #0b0c12;
+}
+/* Inputs: sunken black LED fields. */
+:root[data-style='winamp'] input:not([type='range']),
+:root[data-style='winamp'] select,
+:root[data-style='winamp'] textarea {
+  background-color: #000;
+  box-shadow: inset 1px 1px 0 #000, inset -1px -1px 0 #5a5f7e;
+}
+/* Headings read like the player's LED display. */
+:root[data-style='winamp'] main h1 {
+  font-family: 'Lucida Console', 'DejaVu Sans Mono', Consolas, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 8px rgba(40, 245, 40, 0.55);
+}
+/* Seek/volume: a black groove with a square silver slider. */
+:root[data-style='winamp'] input[type='range']::-webkit-slider-thumb {
+  width: 12px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 0;
+  background: linear-gradient(to bottom, #e9eaf2, #8d90a8);
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #4d5068, 0 0 0 1px #0b0c12;
+}
+:root[data-style='winamp'] input[type='range']::-moz-range-thumb {
+  width: 12px;
+  height: 14px;
+  border-radius: 0;
+  background: linear-gradient(to bottom, #e9eaf2, #8d90a8);
+}
+:root[data-style='winamp'] ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+:root[data-style='winamp'] ::-webkit-scrollbar-track {
+  background: #0b0c12;
+}
+:root[data-style='winamp'] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(to right, #b4b6c8, #7d8098);
+  border-radius: 0;
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #4d5068;
+}
+/* The player bar's play/pause key is `bg-zinc-50` (= LED green here): make it a silver key too. */
+:root[data-style='winamp'] button.bg-zinc-50 {
+  background-color: #b4b6c8;
+  background-image: linear-gradient(to bottom, #e9eaf2 0%, #b4b6c8 48%, #8d90a8 100%);
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #4d5068, 0 0 0 1px #0b0c12;
+}
+
+/* ═══ Interface style: Windows Vista / Media Player 11 ════════════════════════
+   Always dark: deep navy "glass" panels with a blue Aero glow, glossy blue
+   buttons and the big round play orb. Same variable approach as the skins above. */
+:root[data-style='vista'] {
+  color-scheme: dark;
+  --c-950: 5 12 26;
+  --c-900: 11 22 40;
+  --c-800: 24 42 70;
+  --c-700: 44 68 104;
+  --c-600: 70 98 138;
+  --c-500: 128 156 194;
+  --c-400: 164 190 222;
+  --c-300: 198 216 238;
+  --c-200: 222 234 247;
+  --c-100: 238 245 252;
+  --c-50: 255 255 255;
+  --brand: 56 156 245;
+  --brand-dim: 24 112 208;
+  --on-brand: 4 16 31;
+  --sea: 110 214 138; /* Vista green */
+}
+:root[data-style='vista'] body {
+  font-family: 'Segoe UI', 'Segoe UI Variable', Frutiger, 'Frutiger Linotype', 'Lucida Grande', 'Noto Sans', sans-serif;
+}
+/* The window background: dark navy with the blue Aero glow rising from the bottom-right. */
+:root[data-style='vista'] body,
+:root[data-style='vista'] .h-full.flex-col.bg-zinc-900 {
+  background-image:
+    radial-gradient(ellipse 70% 55% at 88% 108%, rgba(56, 156, 245, 0.38), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 0% 0%, rgba(56, 156, 245, 0.12), transparent 70%),
+    linear-gradient(to bottom, #0d1a30, #050b16);
+  background-attachment: fixed;
+}
+/* Chrome: frosted glass with a bright top edge. */
+:root[data-style='vista'] aside.bg-zinc-950,
+:root[data-style='vista'] footer.bg-zinc-950,
+:root[data-style='vista'] header.bg-zinc-950 {
+  background-color: rgb(5 12 26 / 0.72);
+  background-image: linear-gradient(to bottom, rgba(120, 175, 240, 0.34) 0%, rgba(30, 60, 105, 0.35) 46%, rgba(4, 10, 22, 0.55) 52%, rgba(10, 24, 48, 0.6) 100%);
+  border-color: rgba(140, 190, 250, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(10px);
+}
+/* Panels and fields get a soft glass sheen. */
+:root[data-style='vista'] .bg-zinc-800 {
+  background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 55%);
+  box-shadow: inset 0 0 0 1px rgba(160, 200, 255, 0.1);
+}
+:root[data-style='vista'] .rounded-lg,
+:root[data-style='vista'] .rounded-xl {
+  border-radius: 6px;
+}
+:root[data-style='vista'] .rounded-md {
+  border-radius: 4px;
+}
+/* Glossy Aero buttons. */
+:root[data-style='vista'] .bg-brand {
+  background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.16) 49%, rgba(0, 0, 0, 0.12) 50%, rgba(255, 255, 255, 0.22) 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4), 0 1px 4px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+/* The signature round play orb (player bar's play/pause key is `bg-zinc-50`). */
+:root[data-style='vista'] button.bg-zinc-50 {
+  background-color: #1a6fd0;
+  background-image: radial-gradient(circle at 50% 16%, #d6f1ff 0%, #6cc4ff 26%, #2e96f0 52%, #0b4a9a 100%);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.6), 0 0 14px rgba(56, 156, 245, 0.85), 0 2px 6px rgba(0, 0, 0, 0.6);
+  transform: scale(1.2);
+}
+:root[data-style='vista'] button.bg-zinc-50:hover {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.8), 0 0 20px rgba(110, 214, 138, 0.9), 0 2px 6px rgba(0, 0, 0, 0.6);
+  transform: scale(1.28);
+}
+:root[data-style='vista'] button.bg-zinc-50 svg {
+  color: #fff;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+}
+/* Light, glowing page titles. */
+:root[data-style='vista'] main h1 {
+  font-weight: 300;
+  letter-spacing: 0.01em;
+  text-shadow: 0 0 14px rgba(56, 156, 245, 0.7);
+}
+/* Seek/volume: glossy round thumb. */
+:root[data-style='vista'] input[type='range']::-webkit-slider-thumb {
+  background: radial-gradient(circle at 50% 25%, #d6f1ff, #389cf5 60%, #0b4a9a);
+  box-shadow: 0 0 6px rgba(56, 156, 245, 0.9);
+}
+:root[data-style='vista'] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(to right, rgba(150, 200, 255, 0.55), rgba(60, 120, 200, 0.55));
+  border: 1px solid rgba(170, 210, 255, 0.5);
 }

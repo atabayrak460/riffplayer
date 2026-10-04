@@ -39,6 +39,13 @@ beforeEach(() => {
   });
 });
 
+beforeEach(() => {
+  vi.spyOn(subsonic, 'getGenres').mockResolvedValue([
+    { value: 'Rock', songCount: 3 },
+    { value: 'Pop', songCount: 2 },
+  ]);
+});
+
 afterEach(() => {
   if (originalOffsetHeight) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', originalOffsetHeight);
   vi.restoreAllMocks();
@@ -106,8 +113,40 @@ describe('AllSongsPage', () => {
     fireEvent.scroll(scrollContainer);
 
     await waitFor(() => {
-      expect(getAllSongsMock).toHaveBeenCalledWith(200, 200);
+      expect(getAllSongsMock).toHaveBeenCalledWith(200, 200, { genre: undefined, sort: 'title', quality: undefined });
     });
     expect(await screen.findByText('Song 201')).toBeInTheDocument();
+  });
+
+  it('refetches with the chosen genre and sort', async () => {
+    const getAll = vi.spyOn(subsonic, 'getAllSongs').mockResolvedValue([song('1')]);
+    vi.spyOn(subsonic, 'getLibraryStats').mockResolvedValue({ trackCount: 1 });
+
+    renderPage();
+    await screen.findByText('Song 1');
+    await screen.findByRole('option', { name: 'Rock (3)' });
+
+    fireEvent.change(screen.getByLabelText('Filter by genre'), { target: { value: 'Rock' } });
+    await waitFor(() =>
+      expect(getAll).toHaveBeenLastCalledWith(0, 200, { genre: 'Rock', sort: 'title', quality: undefined }),
+    );
+
+    fireEvent.change(screen.getByLabelText('Sort songs'), { target: { value: 'added_desc' } });
+    await waitFor(() =>
+      expect(getAll).toHaveBeenLastCalledWith(0, 200, { genre: 'Rock', sort: 'added_desc', quality: undefined }),
+    );
+  });
+
+  it('refetches with the quality filter', async () => {
+    const getAll = vi.spyOn(subsonic, 'getAllSongs').mockResolvedValue([song('1')]);
+    vi.spyOn(subsonic, 'getLibraryStats').mockResolvedValue({ trackCount: 1 });
+
+    renderPage();
+    await screen.findByText('Song 1');
+    fireEvent.change(screen.getByLabelText('Filter by audio quality'), { target: { value: 'hires' } });
+
+    await waitFor(() =>
+      expect(getAll).toHaveBeenLastCalledWith(0, 200, { genre: undefined, sort: 'title', quality: 'hires' }),
+    );
   });
 });

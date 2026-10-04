@@ -43,7 +43,7 @@ export function RecommendationsPage() {
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               tab === t
                 ? 'border-brand text-brand'
-                : 'border-transparent text-zinc-400 hover:text-white'
+                : 'border-transparent text-zinc-400 hover:text-zinc-50'
             }`}
           >
             {t === 'similar' ? 'Similar to your taste' : 'Discover weekly'}
@@ -51,7 +51,7 @@ export function RecommendationsPage() {
         ))}
         <button
           onClick={() => refetch()}
-          className="ml-auto text-xs text-zinc-500 hover:text-white transition-colors pb-2"
+          className="ml-auto text-xs text-zinc-500 hover:text-zinc-50 transition-colors pb-2"
           title="Refresh suggestions"
         >
           ↻ Refresh

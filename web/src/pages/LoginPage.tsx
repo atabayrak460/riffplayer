@@ -31,7 +31,7 @@ export function LoginPage() {
   return (
     <div className="min-h-screen bg-zinc-900 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-3xl font-bold text-white text-center mb-8 tracking-tight">
+        <h1 className="text-3xl font-bold text-zinc-50 text-center mb-8 tracking-tight">
           <span className="text-brand">RiffPlayer</span>
         </h1>
 
@@ -48,7 +48,7 @@ export function LoginPage() {
               value={serverUrl}
               onChange={(e) => setServerUrl(e.target.value)}
               required
-              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-brand"
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-50 placeholder-zinc-500 focus:outline-none focus:border-brand"
               placeholder="http://localhost:3000"
             />
           </div>
@@ -62,7 +62,7 @@ export function LoginPage() {
               onChange={(e) => setUsername(e.target.value)}
               required
               autoComplete="username"
-              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-brand"
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-50 placeholder-zinc-500 focus:outline-none focus:border-brand"
               placeholder="admin"
             />
           </div>
@@ -76,7 +76,7 @@ export function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               autoComplete="current-password"
-              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-brand"
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-50 placeholder-zinc-500 focus:outline-none focus:border-brand"
             />
           </div>
 
@@ -87,7 +87,7 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-brand hover:bg-brand-dim disabled:opacity-60 text-white font-medium py-2 rounded-lg transition-colors text-sm"
+            className="w-full bg-brand hover:bg-brand-dim disabled:opacity-60 text-on-brand font-medium py-2 rounded-lg transition-colors text-sm"
           >
             {loading ? 'Connecting…' : 'Sign in'}
           </button>

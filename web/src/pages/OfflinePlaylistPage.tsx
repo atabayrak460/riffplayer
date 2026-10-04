@@ -47,14 +47,14 @@ export function OfflinePlaylistPage() {
         />
         <div className="flex flex-col justify-end gap-2 min-w-0">
           <p className="text-xs uppercase tracking-widest text-zinc-400">Downloaded Playlist</p>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white break-words">{playlist.name}</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-zinc-50 break-words">{playlist.name}</h1>
           <p className="text-sm text-zinc-400">{songs.length} {songs.length === 1 ? 'track' : 'tracks'}</p>
           {playlist.comment && <p className="text-sm text-zinc-400 max-w-md break-words">{playlist.comment}</p>}
           <div className="flex flex-wrap items-center gap-3 mt-1">
             <button
               onClick={() => playQueue(songs)}
               disabled={!songs.length}
-              className="bg-brand hover:bg-brand-dim text-white text-sm font-medium px-5 py-2 rounded-full transition-colors disabled:opacity-50"
+              className="bg-brand hover:bg-brand-dim text-on-brand text-sm font-medium px-5 py-2 rounded-full transition-colors disabled:opacity-50"
             >
               Play
             </button>

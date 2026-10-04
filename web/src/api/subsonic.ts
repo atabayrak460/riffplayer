@@ -150,12 +150,13 @@ export async function getArtist(id: string): Promise<Artist & { album: Album[] }
 
 export async function getAlbumList(
   type: string,
-  opts: { size?: number; offset?: number; fromYear?: number; toYear?: number } = {},
+  opts: { size?: number; offset?: number; fromYear?: number; toYear?: number; quality?: QualityFilter } = {},
 ): Promise<Album[]> {
   const extra: Record<string, string> = { type, size: String(opts.size ?? 50) };
   if (opts.offset) extra.offset = String(opts.offset);
   if (opts.fromYear != null) extra.fromYear = String(opts.fromYear);
   if (opts.toYear != null) extra.toYear = String(opts.toYear);
+  if (opts.quality) extra.quality = opts.quality;
   const r = await get<{ albumList2: { album: Album[] } }>('getAlbumList2.view', extra);
   return r.albumList2.album ?? [];
 }
@@ -186,15 +187,35 @@ export async function search(query: string): Promise<SearchResult> {
   };
 }
 
-export async function getAllSongs(offset: number, limit: number): Promise<Song[]> {
-  const r = await get<{ searchResult3: { song?: Song[] } }>('search3.view', {
+export type AllSongsSort = 'title' | 'added_desc' | 'added_asc';
+
+/** Quality filter (RiffPlayer extension): lossless files only, or Hi-Res only. */
+export type QualityFilter = '' | 'lossless' | 'hires';
+
+export async function getAllSongs(
+  offset: number,
+  limit: number,
+  opts: { genre?: string; sort?: AllSongsSort; quality?: QualityFilter } = {},
+): Promise<Song[]> {
+  const params: Record<string, string> = {
     query: '',
     artistCount: '0',
     albumCount: '0',
     songCount: String(limit),
     songOffset: String(offset),
-  });
+  };
+  // `genre` / `sort` are RiffPlayer extensions to search3 — stock Subsonic
+  // servers ignore them, so the list just comes back unfiltered there.
+  if (opts.genre) params.genre = opts.genre;
+  if (opts.sort) params.sort = opts.sort;
+  if (opts.quality) params.quality = opts.quality;
+  const r = await get<{ searchResult3: { song?: Song[] } }>('search3.view', params);
   return r.searchResult3.song ?? [];
+}
+
+export async function getGenres(): Promise<{ value: string; songCount: number }[]> {
+  const r = await get<{ genres: { genre?: { value: string; songCount: number }[] } }>('getGenres.view');
+  return r.genres.genre ?? [];
 }
 
 // ── Favorites ───────────────────────────────────────────────────────────────
@@ -506,6 +527,47 @@ export async function adminPatchSettings(patch: Record<string, string | null>): 
 
 export async function patchMyPreferences(prefs: Record<string, unknown>): Promise<void> {
   await apiCall('PATCH', 'users/me/preferences', prefs);
+}
+
+/** Credits read from a track's own tags (composer, label, ISRC, …); only what the file says is present. */
+export interface TrackCredits {
+  albumArtist?: string;
+  artists?: string[];
+  composers?: string[];
+  lyricists?: string[];
+  writers?: string[];
+  producers?: string[];
+  conductors?: string[];
+  arrangers?: string[];
+  engineers?: string[];
+  mixers?: string[];
+  remixers?: string[];
+  djMixers?: string[];
+  labels?: string[];
+  catalogNumbers?: string[];
+  isrc?: string[];
+  copyright?: string;
+  releaseDate?: string;
+  originalYear?: number;
+  bpm?: number;
+  key?: string;
+  mood?: string;
+}
+
+export async function getTrackCredits(id: string): Promise<TrackCredits> {
+  const r = (await apiCall('GET', `tracks/${encodeURIComponent(id)}/credits`)) as { credits: TrackCredits };
+  return r.credits;
+}
+
+/** The user's streaming conversion preferences (null fields = send originals). */
+export async function getMyTranscodePrefs(): Promise<{ transcode_format: string | null; transcode_bitrate: number | null }> {
+  const me = (await apiCall('GET', 'users/me')) as {
+    preferences: { transcode_format: string | null; transcode_bitrate: number | null } | null;
+  };
+  return {
+    transcode_format: me.preferences?.transcode_format ?? null,
+    transcode_bitrate: me.preferences?.transcode_bitrate ?? null,
+  };
 }
 
 /** Throws with the server's message (e.g. "Current password is incorrect") on failure. */

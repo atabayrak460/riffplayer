@@ -6,7 +6,7 @@ function Field({ label, description, children }: { label: string; description?: 
   return (
     <div className="flex items-start justify-between gap-6 py-4 border-b border-zinc-800/60">
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-white">{label}</p>
+        <p className="text-sm font-medium text-zinc-50">{label}</p>
         {description && <p className="text-xs text-zinc-400 mt-0.5">{description}</p>}
       </div>
       <div className="flex-shrink-0">{children}</div>
@@ -34,7 +34,7 @@ function TextInput({ value, onChange, onBlur, placeholder, type = 'text', width 
       type={type} value={value}
       onChange={e => onChange(e.target.value)} onBlur={onBlur}
       placeholder={placeholder}
-      className={`bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-sm text-white ${width} focus:outline-none focus:border-brand`}
+      className={`bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-sm text-zinc-50 ${width} focus:outline-none focus:border-brand`}
     />
   );
 }
@@ -72,7 +72,7 @@ export function SettingsPage() {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold text-white mb-6">Server Settings</h2>
+      <h2 className="text-xl font-semibold text-zinc-50 mb-6">Server Settings</h2>
 
       <section className="mb-8">
         <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-3">Last.fm Scrobbling</h3>

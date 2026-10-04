@@ -53,7 +53,7 @@ export function AddToPlaylistDialog({ songId, onClose }: Props) {
 
   return (
     <Modal onClose={onClose} label="Add to playlist" className="p-4 w-full max-w-sm max-h-[70vh] flex flex-col">
-      <h2 className="text-white font-semibold mb-3">Add to playlist</h2>
+      <h2 className="text-zinc-50 font-semibold mb-3">Add to playlist</h2>
       <button
         onClick={() => createMutation.mutate()}
         disabled={busy || isLoading}

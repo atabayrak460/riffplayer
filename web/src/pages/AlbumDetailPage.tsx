@@ -1,3 +1,5 @@
+import { QualityBadge } from '../components/QualityBadge';
+import { albumQuality } from '../lib/quality';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getAlbum } from '../api/subsonic';
@@ -52,7 +54,7 @@ function AlbumDownloadButton({ state, disabled, onDownload, onRemove }: AlbumDow
       className={`${base} ${
         downloaded
           ? 'border-brand text-brand hover:border-red-400 hover:text-red-400'
-          : 'border-zinc-600 text-zinc-200 hover:border-white hover:text-white'
+          : 'border-zinc-600 text-zinc-200 hover:border-white hover:text-zinc-50'
       }`}
     >
       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -130,15 +132,16 @@ export function AlbumDetailPage() {
         />
         <div className="flex flex-col justify-end gap-2 min-w-0">
           <p className="text-xs uppercase tracking-widest text-zinc-400">Album</p>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white break-words">{album.name}</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-zinc-50 break-words">{album.name}</h1>
           <p className="text-zinc-300">{album.artist}</p>
           <p className="text-sm text-zinc-500">
             {album.year && `${album.year} · `}{songs.length} tracks · {formatDuration(album.duration)}
           </p>
+          <div><QualityBadge quality={albumQuality(songs)} /></div>
           <div className="flex flex-wrap items-center gap-3 mt-2">
             <button
               onClick={() => playQueue(songs)}
-              className="bg-brand hover:bg-brand-dim text-white text-sm font-medium px-5 py-2 rounded-full transition-colors"
+              className="bg-brand hover:bg-brand-dim text-on-brand text-sm font-medium px-5 py-2 rounded-full transition-colors"
             >
               Play
             </button>
@@ -154,7 +157,7 @@ export function AlbumDetailPage() {
             <button
               onClick={(e) => openAt(e, menuItems)}
               title="More options"
-              className="text-zinc-400 hover:text-white transition-colors"
+              className="text-zinc-400 hover:text-zinc-50 transition-colors"
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d={ICONS.more} />

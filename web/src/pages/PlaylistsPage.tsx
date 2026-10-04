@@ -51,10 +51,10 @@ export function PlaylistsPage() {
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">Playlists</h1>
+        <h1 className="text-2xl font-bold text-zinc-50">Playlists</h1>
         <button
           onClick={() => setCreating((v) => !v)}
-          className="bg-brand hover:bg-brand-dim text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          className="bg-brand hover:bg-brand-dim text-on-brand text-sm font-medium px-4 py-2 rounded-lg transition-colors"
         >
           + New playlist
         </button>
@@ -68,20 +68,20 @@ export function PlaylistsPage() {
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Playlist name"
             autoFocus
-            className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-brand"
+            className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-50 placeholder-zinc-500 focus:outline-none focus:border-brand"
           />
           <textarea
             value={newDescription}
             onChange={(e) => setNewDescription(e.target.value)}
             placeholder="Description (optional)"
             rows={2}
-            className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 resize-none focus:outline-none focus:border-brand"
+            className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-50 placeholder-zinc-500 resize-none focus:outline-none focus:border-brand"
           />
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="text-sm text-zinc-300 hover:text-white bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors"
+              className="text-sm text-zinc-300 hover:text-zinc-50 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors"
             >
               {newCoverFile ? 'Change cover…' : 'Choose cover…'}
             </button>
@@ -100,14 +100,14 @@ export function PlaylistsPage() {
             <button
               type="submit"
               disabled={createMutation.isPending || !newName.trim()}
-              className="bg-brand hover:bg-brand-dim text-white text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-60"
+              className="bg-brand hover:bg-brand-dim text-on-brand text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-60"
             >
               {createMutation.isPending ? 'Creating…' : 'Create'}
             </button>
             <button
               type="button"
               onClick={() => setCreating(false)}
-              className="text-zinc-400 hover:text-white text-sm px-3 py-2"
+              className="text-zinc-400 hover:text-zinc-50 text-sm px-3 py-2"
             >
               Cancel
             </button>

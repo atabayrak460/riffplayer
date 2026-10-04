@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within, act } from '@testing-library/react';
+import { render, screen, waitFor, within, act, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HeroSection } from './HeroSection';
@@ -78,6 +78,30 @@ describe('HeroSection', () => {
     await waitFor(() => expect(subsonic.getArtist).toHaveBeenCalled());
 
     expect(screen.queryByTitle('Radiohead')).not.toBeInTheDocument();
+  });
+
+  it('opens the cover large from the enlarge button and closes it again', () => {
+    renderWith(<HeroSection song={current} />);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enlarge cover' }));
+    const dialog = screen.getByRole('dialog', { name: 'OK Computer cover' });
+    expect(within(dialog).getByTestId('cover').dataset.id).toBe('cv1');
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('closes the enlarged cover with Escape', () => {
+    renderWith(<HeroSection song={current} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Enlarge cover' }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('offers no enlarge button for a song without cover art', () => {
+    renderWith(<HeroSection song={{ ...current, coverArt: undefined }} />);
+    expect(screen.queryByRole('button', { name: 'Enlarge cover' })).not.toBeInTheDocument();
   });
 });
 
