@@ -86,7 +86,7 @@ describe('GET /api/v1/tracks/:id/credits', () => {
   it('strips control characters from tag text', async () => {
     await pointTrackAt([['TCOM', 'Evil\u0007Name\u001b[31m']]);
     const { credits: c } = (await credits(ids.trackId)).json() as { credits: { composers: string[] } };
-    expect(c.composers[0]).not.toMatch(/[\u0000-\u001f]/);
+    expect([...c.composers[0]].some((ch) => ch.charCodeAt(0) < 32)).toBe(false);
     expect(c.composers[0]).toContain('Evil Name');
   });
 
