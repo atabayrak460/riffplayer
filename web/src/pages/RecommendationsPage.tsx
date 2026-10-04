@@ -4,17 +4,25 @@ import { getRecommendations } from '../api/subsonic';
 import { SongRow } from '../components/SongRow';
 import { DiscoverCover } from '../components/StockCovers';
 import { SystemViewHeader } from '../components/SystemViewHeader';
+import { WeeklyDiscovery } from '../components/WeeklyDiscovery';
 import type { Song } from '../api/types';
 
-type Tab = 'similar' | 'discover';
+type Tab = 'weekly' | 'similar' | 'discover';
+
+const TAB_LABELS: Record<Tab, string> = {
+  weekly: 'Weekly discovery',
+  similar: 'Similar to your taste',
+  discover: 'Picked for you',
+};
 
 export function RecommendationsPage() {
-  const [tab, setTab] = useState<Tab>('similar');
+  const [tab, setTab] = useState<Tab>('weekly');
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['recommendations', tab],
-    queryFn: () => getRecommendations(tab),
+    queryFn: () => getRecommendations(tab as 'similar' | 'discover'),
     retry: false,
+    enabled: tab !== 'weekly', // the weekly tab loads its own data
   });
 
   const songs = (data?.songs ?? []) as Song[];
@@ -36,7 +44,7 @@ export function RecommendationsPage() {
 
       {/* Tab selector */}
       <div className="flex gap-1 mb-6 border-b border-zinc-800">
-        {(['similar', 'discover'] as Tab[]).map((t) => (
+        {(['weekly', 'similar', 'discover'] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -46,9 +54,10 @@ export function RecommendationsPage() {
                 : 'border-transparent text-zinc-400 hover:text-zinc-50'
             }`}
           >
-            {t === 'similar' ? 'Similar to your taste' : 'Discover weekly'}
+            {TAB_LABELS[t]}
           </button>
         ))}
+        {tab !== 'weekly' && (
         <button
           onClick={() => refetch()}
           className="ml-auto text-xs text-zinc-500 hover:text-zinc-50 transition-colors pb-2"
@@ -56,7 +65,13 @@ export function RecommendationsPage() {
         >
           ↻ Refresh
         </button>
+        )}
       </div>
+
+      {tab === 'weekly' ? (
+        <WeeklyDiscovery />
+      ) : (
+        <>
 
       {isLoading && (
         <div className="space-y-1">
@@ -99,6 +114,8 @@ export function RecommendationsPage() {
           Suggestions are based on your listening history and come exclusively from your own library.
           RiffPlayer never provides links or sources to acquire music.
         </p>
+      )}
+        </>
       )}
     </div>
   );

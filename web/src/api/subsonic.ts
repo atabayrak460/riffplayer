@@ -635,6 +635,27 @@ export async function getRecommendations(type: 'similar' | 'discover'): Promise<
   return r;
 }
 
+/** One suggestion for the weekly discovery: names only, never a link or a source. */
+export interface DiscoveryItem {
+  artist: string;
+  track?: string;
+  because: string[];
+}
+
+export type WeeklyDiscovery =
+  | { status: 'ok'; week: string; items: DiscoveryItem[] }
+  | { status: 'not_configured' }
+  | { status: 'no_history' };
+
+export async function getWeeklyDiscovery(): Promise<WeeklyDiscovery> {
+  return (await apiCall('GET', 'recommendations/weekly')) as WeeklyDiscovery;
+}
+
+/** Builds this week's list again (new picks). */
+export async function refreshWeeklyDiscovery(): Promise<WeeklyDiscovery> {
+  return (await apiCall('POST', 'recommendations/weekly/refresh')) as WeeklyDiscovery;
+}
+
 export async function getWrapped(year?: number): Promise<WrappedStats> {
   const path = year ? `recommendations/wrapped?year=${year}` : 'recommendations/wrapped';
   return (await apiCall('GET', path)) as WrappedStats;

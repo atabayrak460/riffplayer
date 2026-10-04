@@ -794,6 +794,13 @@ final recommendationsProvider = FutureProvider.autoDispose
   return client.getRecommendations(type);
 });
 
+final weeklyDiscoveryProvider =
+    FutureProvider.autoDispose<WeeklyDiscovery>((ref) async {
+  final client = ref.read(apiClientProvider);
+  if (client == null) throw Exception('Not authenticated');
+  return client.getWeeklyDiscovery();
+});
+
 // ── Account & admin ─────────────────────────────────────────────────────────
 
 final meProvider = FutureProvider.autoDispose<MeInfo>((ref) async {

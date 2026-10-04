@@ -415,6 +415,51 @@ class WrappedStats {
       );
 }
 
+/// One weekly-discovery suggestion: names only, never a link or a source.
+class DiscoveryItem {
+  const DiscoveryItem(
+      {required this.artist, this.track, this.because = const []});
+  final String artist;
+  final String? track;
+  final List<String> because;
+
+  factory DiscoveryItem.fromJson(Map<String, dynamic> j) => DiscoveryItem(
+        artist: j['artist'] as String? ?? '',
+        track: j['track'] as String?,
+        because: [
+          for (final b in (j['because'] as List<dynamic>? ?? const []))
+            b as String
+        ],
+      );
+}
+
+enum WeeklyStatus { ok, notConfigured, noHistory }
+
+class WeeklyDiscovery {
+  const WeeklyDiscovery(this.status, {this.week, this.items = const []});
+  final WeeklyStatus status;
+
+  /// Monday of the week (YYYY-MM-DD).
+  final String? week;
+  final List<DiscoveryItem> items;
+
+  factory WeeklyDiscovery.fromJson(Map<String, dynamic> j) {
+    final status = switch (j['status']) {
+      'not_configured' => WeeklyStatus.notConfigured,
+      'no_history' => WeeklyStatus.noHistory,
+      _ => WeeklyStatus.ok,
+    };
+    return WeeklyDiscovery(
+      status,
+      week: j['week'] as String?,
+      items: [
+        for (final i in (j['items'] as List<dynamic>? ?? const []))
+          DiscoveryItem.fromJson(i as Map<String, dynamic>)
+      ],
+    );
+  }
+}
+
 class RecommendationsResult {
   final List<Song> songs;
   final String? source;

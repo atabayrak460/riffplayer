@@ -3,6 +3,7 @@ import { getDb } from '../../db/database.js';
 import { getLastFmRecommendations } from '../../recommendations/lastfm.js';
 import { getOllamaRecommendations, generateWrappedSummary } from '../../recommendations/ollama.js';
 import { getWrappedStats } from '../../recommendations/wrapped.js';
+import { generateWeek, getWeekly, weekStart } from '../../recommendations/weekly.js';
 import { songAttrs, toJson, type SongRow } from '../subsonic/serialize.js';
 
 function getSetting(key: string): string | null {
@@ -67,6 +68,23 @@ export async function recommendationsPlugin(app: FastifyInstance): Promise<void>
       source,
       note: 'All tracks are from your own library. No external sources.',
     });
+  });
+
+  // ── GET /api/v1/recommendations/weekly ─────────────────────────────────────
+  // This week's discovery list: artists and tracks that are NOT in the library, as names only
+  // (never a link or a source). Built the first time it is asked for in a week, then kept.
+  app.get('/weekly', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (getSetting('recommendations_enabled') === 'false')
+      return jsonError(reply, 403, 'Recommendations are disabled');
+    reply.send(await getWeekly(req.subsonicUser!.id));
+  });
+
+  // ── POST /api/v1/recommendations/weekly/refresh ────────────────────────────
+  // Build this week's list again (new picks), e.g. after the user has played more music.
+  app.post('/weekly/refresh', { config: { rateLimit: { max: 6, timeWindow: '1 hour' } } }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (getSetting('recommendations_enabled') === 'false')
+      return jsonError(reply, 403, 'Recommendations are disabled');
+    reply.send(await generateWeek(req.subsonicUser!.id, weekStart()));
   });
 
   // ── GET /api/v1/recommendations/wrapped ────────────────────────────────────

@@ -60,6 +60,21 @@ export async function fetchSimilarArtistNames(
   return (data.similarartists?.artist ?? []).map((a) => a.name);
 }
 
+/** The names of an artist's most popular tracks (Last.fm). Names only. */
+export async function fetchTopTrackNames(artistName: string, apiKey: string, limit = 3): Promise<string[]> {
+  const params = new URLSearchParams({
+    method: 'artist.getTopTracks',
+    artist: artistName,
+    api_key: apiKey,
+    format: 'json',
+    limit: String(limit),
+  });
+  const res = await fetch(`https://ws.audioscrobbler.com/2.0/?${params}`, { signal: AbortSignal.timeout(5000) });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { toptracks?: { track?: Array<{ name: string }> } };
+  return (data.toptracks?.track ?? []).map((t) => t.name);
+}
+
 function findLocalTracksByArtistName(artistName: string, limit = 3): SongRow[] {
   const useFts = artistName.length >= MIN_FTS_QUERY_LENGTH;
   const where = useFts

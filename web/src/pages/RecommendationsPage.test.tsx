@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RecommendationsPage } from './RecommendationsPage';
@@ -24,13 +24,17 @@ vi.mock('../components/SystemViewHeader', () => ({
 
 const songs = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `s${i}`, title: `Song ${i}` }) as Song);
 
-function renderPage() {
+// The page opens on the Weekly discovery tab; these tests are about the library-based tabs, so
+// open "Similar to your taste" first (the weekly tab has its own tests).
+function renderPage(openSimilar = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const result = render(
     <QueryClientProvider client={client}>
       <RecommendationsPage />
     </QueryClientProvider>,
   );
+  if (openSimilar) fireEvent.click(screen.getByRole('button', { name: 'Similar to your taste' }));
+  return result;
 }
 
 beforeEach(() => {
@@ -47,14 +51,14 @@ describe('RecommendationsPage', () => {
     expect(screen.getByRole('button', { name: 'Similar to your taste' })).toHaveClass('text-brand');
   });
 
-  it('switching to "Discover weekly" loads the other list', async () => {
+  it('switching to "Picked for you" loads the other list', async () => {
     renderPage();
     await screen.findAllByTestId('song');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Discover weekly' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Picked for you' }));
 
     await waitFor(() => expect(subsonic.getRecommendations).toHaveBeenCalledWith('discover'));
-    expect(screen.getByRole('button', { name: 'Discover weekly' })).toHaveClass('text-brand');
+    expect(screen.getByRole('button', { name: 'Picked for you' })).toHaveClass('text-brand');
   });
 
   it('↻ Refresh refetches the current tab', async () => {

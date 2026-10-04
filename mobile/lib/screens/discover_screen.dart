@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../api/types.dart';
 import '../providers/providers.dart';
+import '../widgets/weekly_discovery_view.dart';
 import '../widgets/song_tile.dart';
 import '../widgets/stock_covers.dart' as stock;
 import '../app_colors.dart';
@@ -12,18 +14,34 @@ class DiscoverScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final resultAsync = ref.watch(recommendationsProvider('discover'));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Discover'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () =>
-                ref.invalidate(recommendationsProvider('discover')),
-          ),
-        ],
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Discover'),
+          bottom: const TabBar(tabs: [
+            Tab(text: 'Weekly discovery'),
+            Tab(text: 'Picked for you'),
+          ]),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () =>
+                  ref.invalidate(recommendationsProvider('discover')),
+            ),
+          ],
+        ),
+        body: TabBarView(children: [
+          const WeeklyDiscoveryView(),
+          _pickedForYou(resultAsync),
+        ]),
       ),
-      body: resultAsync.when(
+    );
+  }
+
+  Widget _pickedForYou(AsyncValue<RecommendationsResult> resultAsync) {
+    return Builder(builder: (context) {
+      return resultAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
           child: Text('Could not load recommendations.',
@@ -76,7 +94,7 @@ class DiscoverScreen extends ConsumerWidget {
             ],
           );
         },
-      ),
-    );
+      );
+    });
   }
 }

@@ -365,6 +365,16 @@ class SubsonicClient {
     return response.data ?? {};
   }
 
+  // ── Weekly discovery (names only) ───────────────────────────────────────────
+
+  Future<WeeklyDiscovery> getWeeklyDiscovery() async =>
+      WeeklyDiscovery.fromJson(await _apiCall('GET', 'recommendations/weekly'));
+
+  /// Builds this week's list again (new picks).
+  Future<WeeklyDiscovery> refreshWeeklyDiscovery() async =>
+      WeeklyDiscovery.fromJson(
+          await _apiCall('POST', 'recommendations/weekly/refresh'));
+
   // ── Song radio ──────────────────────────────────────────────────────────────
 
   /// A batch of songs for an endless radio queue. [type] is song / artist /
