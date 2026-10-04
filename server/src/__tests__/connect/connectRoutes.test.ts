@@ -296,7 +296,7 @@ describe('state, commands and transfer between two devices', () => {
       deviceId: PHONE, commandId: 'add-1', type: 'queue_add', mode: 'next', songIds: [String(trackIds[1]), '999999'],
     });
     expect(add.status).toBe(202);
-    expect((await pc.next('command', (d) => d.commandId === 'add-1')).data).toMatchObject({ songIds: [String(trackIds[1])], mode: 'next' });
+    expect((await pc.next('command', (d) => d.commandId === 'add-1')).data).toMatchObject({ songs: [{ id: String(trackIds[1]) }], mode: 'next' });
 
     expect((await post(token, '/command', { deviceId: PHONE, commandId: 'add-2', type: 'queue_add', mode: 'end', songIds: ['999999'] })).status).toBe(400);
     expect((await post(token, '/command', { deviceId: PHONE, commandId: 'vol-2', type: 'volume', volume: 3 })).status).toBe(400);

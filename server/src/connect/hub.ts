@@ -77,9 +77,16 @@ export type ConnectEvent =
   | { name: 'snapshot'; data: { devices: DeviceInfo[]; activeDeviceId: string | null; state: PublicState | null } }
   | { name: 'devices'; data: { devices: DeviceInfo[]; activeDeviceId: string | null } }
   | { name: 'state'; data: PublicState }
-  | { name: 'command'; data: { commandId: string; type: CommandType; expiresAtMs: number } & CommandArgs }
+  | { name: 'command'; data: CommandEventData }
   | { name: 'load'; data: { queueVersion: number; index: number; positionMs: number; play: boolean; counted: boolean } }
   | { name: 'revoked'; data: Record<string, never> };
+
+/**
+ * What the active device receives. A `queue_add` carries the resolved songs rather than the ids the sender
+ * asked for: the playing device needs full song objects to queue them, and this saves it a lookup per song.
+ */
+export type CommandEventData = { commandId: string; type: CommandType; expiresAtMs: number } &
+  Omit<CommandArgs, 'songIds'> & { songs?: Record<string, unknown>[] };
 
 export interface StreamSink {
   send(seq: number, event: ConnectEvent): void;
@@ -463,24 +470,29 @@ export class ConnectHub {
     if (target.id === fromDeviceId) return { ok: false, reason: 'self' };
 
     // Only songs this user can actually play may be put into a queue; the rest are dropped (order kept).
-    let songIds = cmd.songIds;
-    if (cmd.type === 'queue_add' && songIds) {
-      const known = new Set(this.resolveSongs(userId, songIds).map((s) => s.id));
-      songIds = songIds.filter((id) => known.has(id));
-      if (songIds.length === 0) return { ok: false, reason: 'no_valid_songs' };
+    let songs: Record<string, unknown>[] | undefined;
+    if (cmd.type === 'queue_add' && cmd.songIds) {
+      const byId = new Map(this.resolveSongs(userId, cmd.songIds).map((s) => [s.id, s.json]));
+      songs = cmd.songIds.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
+      if (songs.length === 0) return { ok: false, reason: 'no_valid_songs' };
     }
 
     hub.recentCommands.push(cmd.commandId);
     if (hub.recentCommands.length > RECENT_COMMANDS) hub.recentCommands.shift();
 
-    const { commandId, type, ...args } = cmd;
+    const { commandId, type, positionMs, volume, index, to, songId, mode } = cmd;
     this.emit(target, {
       name: 'command',
       data: {
         commandId,
         type,
-        ...args,
-        ...(songIds ? { songIds } : {}),
+        ...(positionMs !== undefined ? { positionMs } : {}),
+        ...(volume !== undefined ? { volume } : {}),
+        ...(index !== undefined ? { index } : {}),
+        ...(to !== undefined ? { to } : {}),
+        ...(songId !== undefined ? { songId } : {}),
+        ...(mode !== undefined ? { mode } : {}),
+        ...(songs ? { songs } : {}),
         expiresAtMs: this.now() + this.commandTtlMs,
       },
     });

@@ -1018,7 +1018,7 @@ describe('phase 2: queue commands', () => {
   it('queue_add drops ids the library does not know, keeping the order', () => {
     const pc = playing();
     expect(hub.sendCommand(U1, PHONE, { commandId: 'q2', type: 'queue_add', mode: 'end', songIds: ['c', 'nope', 'a'] })).toEqual({ ok: true });
-    expect(pc.probe.of('command')[0].data).toMatchObject({ songIds: ['c', 'a'], mode: 'end' });
+    expect(pc.probe.of('command')[0].data).toMatchObject({ songs: [{ id: 'c' }, { id: 'a' }], mode: 'end' });
   });
 
   it('queue_add with nothing valid is refused and delivers nothing', () => {
