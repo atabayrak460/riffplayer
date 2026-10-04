@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../api/subsonic.dart';
 import '../api/types.dart';
 import '../providers/providers.dart';
 import '../utils/snackbar.dart';
@@ -98,6 +100,8 @@ class SettingsScreen extends ConsumerWidget {
             const _PlaybackSection(),
             const SizedBox(height: 24),
             const LinkTvSection(),
+            const SizedBox(height: 24),
+            const ImportHistorySection(),
             const SizedBox(height: 24),
             const EqualizerSection(),
             const SizedBox(height: 16),
@@ -628,6 +632,189 @@ class _LinkTvSectionState extends ConsumerState<LinkTvSection> {
                 style: TextStyle(
                     color: _ok ? AppColors.success : AppColors.danger,
                     fontSize: 12)),
+          ),
+      ],
+    );
+  }
+}
+
+/// Bring listening history from Spotify, Apple Music or Last.fm in, so Wrapped covers the whole year.
+class ImportHistorySection extends ConsumerStatefulWidget {
+  const ImportHistorySection({super.key, this.pickFile});
+
+  /// Returns the path of a chosen export file, or null. Replaceable in tests.
+  final Future<String?> Function()? pickFile;
+
+  @override
+  ConsumerState<ImportHistorySection> createState() =>
+      _ImportHistorySectionState();
+}
+
+class _ImportHistorySectionState extends ConsumerState<ImportHistorySection> {
+  final _username = TextEditingController();
+  int _year = DateTime.now().year;
+  bool _busy = false;
+  String? _message;
+  bool _ok = false;
+  List<ImportedSource> _sources = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    _username.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refresh() async {
+    final client = ref.read(apiClientProvider);
+    if (client == null) return;
+    try {
+      final sources = await client.getImportedHistory();
+      if (mounted) setState(() => _sources = sources);
+    } catch (_) {
+      // Older server without importing: the section simply shows no history.
+    }
+  }
+
+  Future<String?> _pick() async {
+    if (widget.pickFile != null) return widget.pickFile!();
+    final r = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['zip', 'json', 'csv'],
+    );
+    return r?.files.single.path;
+  }
+
+  Future<void> _run(
+      Future<ImportOutcome> Function(SubsonicClient c) action) async {
+    final client = ref.read(apiClientProvider);
+    if (client == null || _busy) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final outcome = await action(client);
+      if (!mounted) return;
+      setState(() {
+        _ok = true;
+        _message = outcome.message;
+      });
+      ref.invalidate(wrappedProvider);
+      await _refresh();
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final text = data is Map ? data['error'] as String? : null;
+      if (mounted) {
+        setState(() {
+          _ok = false;
+          _message = text ?? 'That didn\'t work. Please try again.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _importFile() async {
+    final path = await _pick();
+    if (path == null) return;
+    await _run((c) => c.importHistoryFile(path));
+  }
+
+  Future<void> _importLastFm() async {
+    final name = _username.text.trim();
+    if (name.isEmpty) return;
+    await _run((c) => c.importLastFm(name, _year));
+  }
+
+  Future<void> _remove(ImportedSource s) async {
+    final client = ref.read(apiClientProvider);
+    if (client == null) return;
+    await client.removeImportedHistory(s.source);
+    ref.invalidate(wrappedProvider);
+    await _refresh();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final thisYear = DateTime.now().year;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionLabel('Import listening history'),
+        const SizedBox(height: 8),
+        Text(
+          'Add your history from other services so Wrapped covers your whole year. '
+          'Only names and times are kept — your data stays on your server.',
+          style: TextStyle(color: AppColors.muted, fontSize: 12),
+        ),
+        const SizedBox(height: 8),
+        FilledButton(
+          onPressed: _busy ? null : _importFile,
+          child: Text(
+              _busy ? 'Importing…' : 'Choose Spotify / Apple Music export'),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Spotify: Account → Privacy → request “Extended streaming history”, then pick the .zip. '
+          'Apple Music: privacy.apple.com → request a copy of your data → pick the .zip or the “Play Activity” CSV.',
+          style: TextStyle(color: AppColors.muted, fontSize: 11.5),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _username,
+                maxLength: 15,
+                decoration: const InputDecoration(
+                    hintText: 'Last.fm username', counterText: ''),
+                onSubmitted: (_) => _importLastFm(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            DropdownButton<int>(
+              value: _year,
+              underline: const SizedBox(),
+              dropdownColor: AppColors.surface,
+              items: [
+                for (var y = thisYear; y > thisYear - 5; y--)
+                  DropdownMenuItem(value: y, child: Text('$y')),
+              ],
+              onChanged: (y) => setState(() => _year = y ?? _year),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: _busy ? null : _importLastFm,
+              child: const Text('Import'),
+            ),
+          ],
+        ),
+        Text(
+            'The Last.fm profile must be public. Needs the admin’s Last.fm key.',
+            style: TextStyle(color: AppColors.muted, fontSize: 11.5)),
+        if (_message != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(_message!,
+                style: TextStyle(
+                    color: _ok ? AppColors.success : AppColors.danger,
+                    fontSize: 12)),
+          ),
+        for (final s in _sources)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            title: Text(s.label),
+            subtitle: Text('${s.plays} plays · ${s.matched} in your library'),
+            trailing: TextButton(
+                onPressed: () => _remove(s), child: const Text('Remove')),
           ),
       ],
     );

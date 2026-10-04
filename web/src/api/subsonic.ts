@@ -718,10 +718,14 @@ export interface WrappedStats {
   totalMinutes: number;
   topTracks: {
     id: string; title: string; artist: string; artistId: string;
-    album: string; albumId: string; coverArt: string; playCount: number;
+    album: string; albumId: string; coverArt: string | null; playCount: number;
+    /** Not in this library (comes from imported listening history), so there is nothing to open. */
+    external?: boolean;
   }[];
-  topArtists: { id: string; name: string; coverArt: string | null; playCount: number }[];
-  topAlbums: { id: string; name: string; artist: string; coverArt: string; playCount: number }[];
+  topArtists: { id: string; name: string; coverArt: string | null; playCount: number; external?: boolean }[];
+  topAlbums: { id: string; name: string; artist: string; coverArt: string | null; playCount: number; external?: boolean }[];
+  /** How many of totalPlays came from imported history. */
+  importedPlays: number;
   byMonth: { month: number; plays: number }[];
 }
 
@@ -749,6 +753,47 @@ export async function getWeeklyDiscovery(): Promise<WeeklyDiscovery> {
 /** Builds this week's list again (new picks). */
 export async function refreshWeeklyDiscovery(): Promise<WeeklyDiscovery> {
   return (await apiCall('POST', 'recommendations/weekly/refresh')) as WeeklyDiscovery;
+}
+
+// ── Import listening history (Spotify / Apple Music / Last.fm) ───────────────
+
+export type ImportSource = 'spotify' | 'apple_music' | 'lastfm';
+
+export interface ImportedSource {
+  source: ImportSource;
+  plays: number;
+  matched: number;
+  firstPlayedAt: number | null;
+  lastPlayedAt: number | null;
+}
+
+export interface ImportResult {
+  source: ImportSource;
+  files: number;
+  found: number;
+  added: number;
+  duplicates: number;
+  matched: number;
+  truncated?: boolean;
+}
+
+export async function getImportedHistory(): Promise<ImportedSource[]> {
+  return ((await apiCall('GET', 'import/history')) as { sources: ImportedSource[] }).sources;
+}
+
+/** Uploads a Spotify or Apple Music export (.zip, .json or .csv); the server works out which it is. */
+export async function importHistoryFile(file: File): Promise<ImportResult> {
+  const form = new FormData();
+  form.append('file', file);
+  return (await apiCall('POST', 'import/history/file', undefined, form)) as ImportResult;
+}
+
+export async function importLastFm(username: string, year: number): Promise<ImportResult> {
+  return (await apiCall('POST', 'import/history/lastfm', { username, year })) as ImportResult;
+}
+
+export async function removeImportedHistory(source?: ImportSource): Promise<void> {
+  await apiCall('DELETE', source ? `import/history?source=${source}` : 'import/history');
 }
 
 export async function getWrapped(year?: number): Promise<WrappedStats> {

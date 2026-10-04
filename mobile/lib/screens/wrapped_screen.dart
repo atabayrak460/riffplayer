@@ -129,6 +129,13 @@ class _WrappedScreenState extends ConsumerState<WrappedScreen> {
                   ),
                 ],
               ),
+              if (stats.importedPlays > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                      'Includes ${stats.importedPlays} plays imported from other services.',
+                      style: TextStyle(color: AppColors.muted, fontSize: 11.5)),
+                ),
               if (stats.topTracks.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 const _SectionLabel('Top track'),
@@ -262,7 +269,9 @@ class _TopTrackCard extends ConsumerWidget {
         ? client?.coverArtUrl(track.coverArt!, size: 200)
         : null;
     return GestureDetector(
-      onTap: () => context.push('/albums/${track.albumId}'),
+      onTap: track.external
+          ? null
+          : () => context.push('/albums/${track.albumId}'),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -311,7 +320,9 @@ class _TopArtistRow extends ConsumerWidget {
         ? client?.coverArtUrl(artist.coverArt!, size: 100)
         : null;
     return GestureDetector(
-      onTap: () => context.push('/artists/${artist.id}'),
+      onTap: artist.external || artist.id.isEmpty
+          ? null
+          : () => context.push('/artists/${artist.id}'),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(
@@ -351,7 +362,9 @@ class _TopTrackRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-        onTap: () => context.push('/albums/${track.albumId}'),
+        onTap: track.external
+            ? null
+            : () => context.push('/albums/${track.albumId}'),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Row(

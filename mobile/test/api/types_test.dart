@@ -2,6 +2,7 @@ import 'package:riffplayer_mobile/api/types.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  importedHistoryTests();
   group('Credentials', () {
     test('copyWith replaces only the token, keeping everything else', () {
       const original = Credentials(
@@ -311,6 +312,57 @@ void main() {
       expect(stats.topTracks, isEmpty);
       expect(stats.topArtists, isEmpty);
       expect(stats.byMonth, isEmpty);
+    });
+  });
+}
+
+void importedHistoryTests() {
+  group('imported listening history', () {
+    test('Wrapped marks songs that are not in the library', () {
+      final w = WrappedStats.fromJson({
+        'year': 2023,
+        'totalPlays': 3,
+        'totalMinutes': 10,
+        'importedPlays': 2,
+        'topTracks': [
+          {
+            'id': '',
+            'title': 'Elsewhere',
+            'artist': 'Far Band',
+            'coverArt': null,
+            'playCount': 2,
+            'external': true
+          },
+          {'id': '7', 'title': 'Here', 'playCount': 1},
+        ],
+        'topArtists': [
+          {'id': '', 'name': 'Far Band', 'playCount': 2, 'external': true},
+        ],
+        'byMonth': [],
+      });
+      expect(w.importedPlays, 2);
+      expect(w.topTracks[0].external, isTrue);
+      expect(w.topTracks[1].external, isFalse);
+      expect(w.topArtists.single.external, isTrue);
+    });
+
+    test('an older server\'s Wrapped still parses', () {
+      final w = WrappedStats.fromJson(
+          {'year': 2023, 'totalPlays': 0, 'totalMinutes': 0});
+      expect(w.importedPlays, 0);
+    });
+
+    test('an import result reads as a sentence', () {
+      expect(
+          const ImportOutcome(source: 'apple_music', added: 4, duplicates: 0)
+              .message,
+          '4 plays added from Apple Music.');
+      expect(
+          const ImportOutcome(
+                  source: 'lastfm', added: 1, duplicates: 3, truncated: true)
+              .message,
+          startsWith(
+              '1 plays added from Last.fm, 3 already counted, only the first part'));
     });
   });
 }

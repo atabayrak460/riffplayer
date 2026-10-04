@@ -54,6 +54,7 @@ Multi-device control lives entirely on the custom API, with **no schema change**
 - `playlist_tracks` — playlist_id, track_id, position
 - `favorites` — user_id, item_type ('track'|'album'|'artist'), item_id, created_at
 - **`play_history`** — id, user_id, track_id, played_at, client _(populate from Phase 1; feeds counts, recently-played, recommendations, Wrapped)_
+- **`external_plays`** — id, user_id, source (`spotify` / `apple_music` / `lastfm`), artist, title, album, played_at, duration_ms, track_id (nullable: set when the play matches a library song), dedupe_key _(listening history the user imports from other services so Wrapped covers the whole year, including songs not in the library; names and times only, never audio or a source; unique per user on dedupe_key so re-importing is harmless)_
 - `lyrics` — id, track_id, synced_lrc (nullable), plain_text (nullable)
 - `settings` — key, value (server + per-user config; donation prompt toggle, transcoding defaults, AI mode, etc.)
 
@@ -76,3 +77,8 @@ One Dart codebase for iOS + Android. Native background playback, lock-screen / n
 
 ## Deployment
 Multi-stage Docker image; ship an example `docker-compose.yml` (mount music dir read-only, a data volume for SQLite + covers). Optional later: AUR / `.deb` / `.rpm`. Updates: document `docker compose pull`; mention Watchtower for opt-in auto-update. Never force silent updates.
+
+## Importing listening history (Wrapped)
+
+Users can import their own history from Spotify (Extended streaming history `.zip`/`.json`), Apple Music (privacy-export "Play Activity" CSV, also inside the nested zip Apple sends) and Last.fm (public profile, through the admin's `lastfm_api_key`). Parsing is on the server (`server/src/import/`); plays are matched to library songs on a normalised artist + title and stored in `external_plays`. A play that duplicates one already in `play_history` (e.g. a Last.fm scrobble of a RiffPlayer play, ±3 min) is not counted twice. `getWrappedStats` merges both tables; songs not in the library are returned with `external: true` and no ids/cover. Dependencies: `fflate` (server, pure-JS unzip, no native build) and `file_picker` (mobile, system file chooser for the export).
+

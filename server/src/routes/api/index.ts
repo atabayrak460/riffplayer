@@ -17,6 +17,7 @@ import { tracksPlugin } from './tracks.js';
 import { sharePlugin } from './share.js';
 import { radioPlugin } from './radio.js';
 import { socialPlugin } from './social.js';
+import { importHistoryPlugin } from './importHistory.js';
 
 // ── Plugin ────────────────────────────────────────────────────────────────────
 // Each area of the custom REST API lives in its own file (auth, me, admin/*,
@@ -70,6 +71,12 @@ export async function apiPlugin(app: FastifyInstance): Promise<void> {
     rd.addHook('preHandler', apiAuth);
     rd.register(radioPlugin);
   }, { prefix: '/radio' });
+
+  // Listening history imported from Spotify / Apple Music / Last.fm — all require auth, under /import/*
+  app.register(async (imp) => {
+    imp.addHook('preHandler', apiAuth);
+    imp.register(importHistoryPlugin);
+  }, { prefix: '/import' });
 
   // Share pictures (song card, playlist pages), rendered on the server — all require auth, under /share/*
   app.register(async (sh) => {

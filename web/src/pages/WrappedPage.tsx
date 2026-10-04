@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { getWrapped, generateWrappedSummary } from '../api/subsonic';
@@ -16,6 +16,11 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
       {sub && <p className="text-sm text-zinc-400">{sub}</p>}
     </div>
   );
+}
+
+/** Songs and artists that are not in this library (imported history) have nothing to open. */
+function MaybeLink({ to, className, children }: { to: string | null; className: string; children: ReactNode }) {
+  return to ? <Link to={to} className={className}>{children}</Link> : <div className={className}>{children}</div>;
 }
 
 export function WrappedPage() {
@@ -84,17 +89,22 @@ export function WrappedPage() {
               sub={`${stats.totalMinutes.toLocaleString()} min`}
             />
           </div>
+          {stats.importedPlays > 0 && (
+            <p className="text-xs text-zinc-500 -mt-5">
+              Includes {stats.importedPlays.toLocaleString()} plays imported from other services.
+            </p>
+          )}
 
           {/* Top track + artist */}
           {stats.topTracks[0] && (
             <div>
               <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-3">Top track</h2>
-              <Link
-                to={`/albums/${stats.topTracks[0].albumId}`}
+              <MaybeLink
+                to={stats.topTracks[0].external ? null : `/albums/${stats.topTracks[0].albumId}`}
                 className="flex items-center gap-4 bg-zinc-800/60 rounded-xl p-4 hover:bg-zinc-800 transition-colors"
               >
                 <CoverArt
-                  id={stats.topTracks[0].coverArt}
+                  id={stats.topTracks[0].coverArt ?? undefined}
                   size={64}
                   className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
                 />
@@ -105,7 +115,7 @@ export function WrappedPage() {
                     {stats.topTracks[0].playCount} plays
                   </p>
                 </div>
-              </Link>
+              </MaybeLink>
             </div>
           )}
 
@@ -115,9 +125,9 @@ export function WrappedPage() {
               <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-3">Top artists</h2>
               <div className="space-y-2">
                 {stats.topArtists.slice(0, 5).map((artist, i) => (
-                  <Link
-                    key={artist.id}
-                    to={`/artists/${artist.id}`}
+                  <MaybeLink
+                    key={artist.id || artist.name}
+                    to={artist.id ? `/artists/${artist.id}` : null}
                     className="flex items-center gap-3 hover:bg-zinc-800/50 rounded-lg px-3 py-2 transition-colors"
                   >
                     <span className="text-sm text-zinc-500 w-5 text-right">{i + 1}</span>
@@ -128,7 +138,7 @@ export function WrappedPage() {
                     />
                     <p className="text-sm font-medium text-zinc-50 flex-1">{artist.name}</p>
                     <p className="text-xs text-zinc-500">{artist.playCount} plays</p>
-                  </Link>
+                  </MaybeLink>
                 ))}
               </div>
             </div>
@@ -190,9 +200,9 @@ export function WrappedPage() {
               <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-3">All top tracks</h2>
               <div className="space-y-1">
                 {stats.topTracks.map((t, i) => (
-                  <Link
-                    key={t.id}
-                    to={`/albums/${t.albumId}`}
+                  <MaybeLink
+                    key={t.id || `${t.artist}-${t.title}`}
+                    to={t.external ? null : `/albums/${t.albumId}`}
                     className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-800/50 transition-colors"
                   >
                     <span className="text-sm text-zinc-500 w-5 text-right">{i + 1}</span>
@@ -201,7 +211,7 @@ export function WrappedPage() {
                       <p className="text-xs text-zinc-400 truncate">{t.artist} · {t.album}</p>
                     </div>
                     <p className="text-xs text-zinc-500 flex-shrink-0">{t.playCount} plays</p>
-                  </Link>
+                  </MaybeLink>
                 ))}
               </div>
             </div>

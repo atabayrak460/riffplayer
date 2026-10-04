@@ -36,6 +36,7 @@ function stats(extra: Partial<WrappedStats> = {}): WrappedStats {
       id: `ar${i + 1}`, name: `Artist ${i + 1}`, coverArt: null, playCount: 70 - i,
     })),
     topAlbums: [],
+    importedPlays: 0,
     byMonth: [{ month: 1, plays: 10 }, { month: 6, plays: 40 }],
     ...extra,
   };
@@ -237,3 +238,23 @@ describe('WrappedPage — AI summary', () => {
     expect(screen.getByRole('button', { name: 'Generate with Ollama' })).toBeEnabled();
   });
 });
+
+describe('WrappedPage — imported history', () => {
+  it('says how many plays were imported, and does not link songs that are not in the library', async () => {
+    vi.spyOn(subsonic, 'getWrapped').mockResolvedValue(stats({
+      importedPlays: 900,
+      topTracks: [
+        { ...track(1, 50), id: '', albumId: '', coverArt: null, external: true },
+        track(2, 30),
+      ],
+      topArtists: [{ id: '', name: 'Far Band', coverArt: null, playCount: 40, external: true }],
+    }));
+    renderPage();
+
+    expect(await screen.findByText('Includes 900 plays imported from other services.')).toBeInTheDocument();
+    expect(screen.getByText('Far Band').closest('a')).toBeNull();
+    expect(screen.getAllByText('Track 1')[0].closest('a')).toBeNull();
+    expect(screen.getAllByText('Track 2')[0].closest('a')).toHaveAttribute('href', '/albums/al2');
+  });
+});
+

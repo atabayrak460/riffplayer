@@ -594,6 +594,32 @@ class SubsonicClient {
     return WrappedStats.fromJson(r);
   }
 
+  // ── Import listening history ────────────────────────────────────────────────
+
+  Future<List<ImportedSource>> getImportedHistory() async {
+    final r = await _apiCall('GET', 'import/history');
+    return (r['sources'] as List<dynamic>? ?? [])
+        .map((s) => ImportedSource.fromJson(s as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Uploads a Spotify or Apple Music export (.zip, .json or .csv); the server works out which.
+  Future<ImportOutcome> importHistoryFile(String filePath,
+      {String? filename}) async {
+    final form = FormData.fromMap({
+      'file': await MultipartFile.fromFile(filePath, filename: filename),
+    });
+    return ImportOutcome.fromJson(
+        await _apiCall('POST', 'import/history/file', data: form));
+  }
+
+  Future<ImportOutcome> importLastFm(String username, int year) async =>
+      ImportOutcome.fromJson(await _apiCall('POST', 'import/history/lastfm',
+          data: {'username': username, 'year': year}));
+
+  Future<void> removeImportedHistory(String source) =>
+      _apiCall('DELETE', 'import/history?source=$source');
+
   Future<String> generateWrappedSummary({int? year}) async {
     final path = year != null
         ? 'recommendations/wrapped/summary?year=$year'

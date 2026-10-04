@@ -332,6 +332,9 @@ class WrappedTopTrack {
   final String? coverArt;
   final int playCount;
 
+  /// Not in this library (it comes from imported listening history), so there is nothing to open.
+  final bool external;
+
   const WrappedTopTrack({
     required this.id,
     required this.title,
@@ -341,6 +344,7 @@ class WrappedTopTrack {
     required this.albumId,
     this.coverArt,
     required this.playCount,
+    this.external = false,
   });
 
   factory WrappedTopTrack.fromJson(Map<String, dynamic> j) => WrappedTopTrack(
@@ -352,6 +356,7 @@ class WrappedTopTrack {
         albumId: j['albumId'] as String? ?? '',
         coverArt: j['coverArt'] as String?,
         playCount: (j['playCount'] as num?)?.toInt() ?? 0,
+        external: j['external'] as bool? ?? false,
       );
 }
 
@@ -360,12 +365,14 @@ class WrappedTopArtist {
   final String name;
   final String? coverArt;
   final int playCount;
+  final bool external;
 
   const WrappedTopArtist({
     required this.id,
     required this.name,
     this.coverArt,
     required this.playCount,
+    this.external = false,
   });
 
   factory WrappedTopArtist.fromJson(Map<String, dynamic> j) => WrappedTopArtist(
@@ -373,6 +380,7 @@ class WrappedTopArtist {
         name: j['name'] as String,
         coverArt: j['coverArt'] as String?,
         playCount: (j['playCount'] as num?)?.toInt() ?? 0,
+        external: j['external'] as bool? ?? false,
       );
 }
 
@@ -396,6 +404,9 @@ class WrappedStats {
   final List<WrappedTopArtist> topArtists;
   final List<WrappedMonth> byMonth;
 
+  /// How many of [totalPlays] came from imported history (Spotify, Apple Music, Last.fm).
+  final int importedPlays;
+
   const WrappedStats({
     required this.year,
     required this.totalPlays,
@@ -403,6 +414,7 @@ class WrappedStats {
     required this.topTracks,
     required this.topArtists,
     required this.byMonth,
+    this.importedPlays = 0,
   });
 
   factory WrappedStats.fromJson(Map<String, dynamic> j) => WrappedStats(
@@ -418,7 +430,65 @@ class WrappedStats {
         byMonth: (j['byMonth'] as List<dynamic>? ?? [])
             .map((m) => WrappedMonth.fromJson(m as Map<String, dynamic>))
             .toList(),
+        importedPlays: (j['importedPlays'] as num?)?.toInt() ?? 0,
       );
+}
+
+/// What has been imported from one other service.
+class ImportedSource {
+  const ImportedSource(
+      {required this.source, required this.plays, required this.matched});
+  final String source; // spotify | apple_music | lastfm
+  final int plays;
+  final int matched;
+
+  String get label => switch (source) {
+        'spotify' => 'Spotify',
+        'apple_music' => 'Apple Music',
+        'lastfm' => 'Last.fm',
+        _ => source,
+      };
+
+  factory ImportedSource.fromJson(Map<String, dynamic> j) => ImportedSource(
+        source: j['source'] as String? ?? '',
+        plays: (j['plays'] as num?)?.toInt() ?? 0,
+        matched: (j['matched'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// The outcome of one import.
+class ImportOutcome {
+  const ImportOutcome({
+    required this.source,
+    required this.added,
+    required this.duplicates,
+    this.truncated = false,
+  });
+  final String source;
+  final int added;
+  final int duplicates;
+  final bool truncated;
+
+  String get label =>
+      ImportedSource(source: source, plays: 0, matched: 0).label;
+
+  factory ImportOutcome.fromJson(Map<String, dynamic> j) => ImportOutcome(
+        source: j['source'] as String? ?? '',
+        added: (j['added'] as num?)?.toInt() ?? 0,
+        duplicates: (j['duplicates'] as num?)?.toInt() ?? 0,
+        truncated: j['truncated'] as bool? ?? false,
+      );
+
+  /// A sentence for the screen.
+  String get message {
+    final parts = ['$added plays added from $label'];
+    if (duplicates > 0) parts.add('$duplicates already counted');
+    if (truncated) {
+      parts.add(
+          'only the first part of the year was read — run it again to add the rest');
+    }
+    return '${parts.join(', ')}.';
+  }
 }
 
 /// One weekly-discovery suggestion: names only, never a link or a source.
