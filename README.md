@@ -31,14 +31,22 @@ A self-hosted music server with a polished first-party web client, an Android ap
 - **Play history** — every play logged from day one (`play_history` table); feeds recently-played, most-played, recommendations, and Wrapped
 - **Scrobbling** — Last.fm (with proper `api_sig` signing) and ListenBrainz, opt-in per-user; fires after confirmed plays
 - **JWT authentication** — `POST /api/v1/auth/login` issues a 90-day token; `/api/v1` routes accept Bearer JWT with Subsonic token fallback
+- **Audio quality profile** — records sample rate, bit depth, channels, codec and lossless/lossy per track (exposed as the OpenSubsonic `samplingRate` / `bitDepth` / `channelCount` fields); the first scan after upgrading re-reads existing files once to fill them in
+- **Filters and sorting** — `search3` accepts optional `genre`, `sort` (title / date added) and `quality` (lossless / Hi-Res) parameters, `getAlbumList2` accepts `quality`; stock Subsonic clients simply ignore them
+- **Playlist cover mosaics** — a playlist without an uploaded cover gets a 2×2 collage of its first four albums' covers
+- **Track credits** — composer, lyricist, producer, label, ISRC and more, read from the file's own tags on demand (`GET /api/v1/tracks/:id/credits`)
 - **RiffPlayer Connect** — a user's devices see each other and hand playback over / remote-control it, Spotify-Connect style ([details](#riffplayer-connect)); in-memory relay over server-sent events, no database tables, nothing leaves your server
 
 ### Web client
-- **React + TypeScript PWA** — installable, responsive, dark-themed
+- **React + TypeScript PWA** — installable, responsive; dark, light or follow-the-system theme (amber on deep navy / warm cream)
 - **Library browse** — albums grid (sort by newest / recently played / most played / starred / A–Z / random), artist index, album and artist detail pages
 - **Search** — finds artists, albums, and songs simultaneously
 - **Queue management** — add tracks, drag-to-reorder (@dnd-kit), remove, clear; persistent across navigation
-- **Player** — HTML5 audio, play/pause/next/prev, seek bar, volume; applies ReplayGain gain offset to `audio.volume`
+- **Player** — HTML5 audio, play/pause/next/prev, seek bar, volume
+- **Hi-Fi playback** — quality badge (Hi-Res / Lossless / format) and a signal-path view (source → delivery → playback); ReplayGain off / track / album with a pre-amp; gapless playback; crossfade (0–12 s); 10-band equalizer (needs the audio to come from the same address as the page)
+- **Interface styles** — besides the standard look: iPod Classic (with Cover Flow album browsing), Winamp and Windows Vista / Media Player 11
+- **Filters** — All Songs by genre, quality (lossless / Hi-Res only) and date added; Albums by quality
+- **Song info** — format details, credits and the signal path
 - **Synced lyrics panel** — slide-in overlay with per-line time sync and auto-scroll; toggled from the player bar
 - **Favourites** — star/unstar tracks, albums, and artists; dedicated Favourites page
 - **Playlists** — create, rename, delete, drag-to-reorder tracks, upload custom cover image
@@ -57,6 +65,9 @@ A self-hosted music server with a polished first-party web client, an Android ap
 - **Full parity** with web: browse, search, queue, playlists, favourites
 - **Full-screen player** with seek slider, star/unstar, prev/play/next
 - **Per-tab navigation** with persistent mini-player across all screens
+- **Themes and interface styles** — dark, light or system, plus the iPod Classic (Cover Flow), Winamp and Windows Vista styles
+- **Gestures** — pull the full-screen player down from anywhere to close it, flick the mini player up to open it, swipe songs to queue or favourite
+- **Hi-Fi** — quality badge, signal path and credits in the player and song info; lossless / Hi-Res filter; ReplayGain off / track / album with a pre-amp; gapless playback; equalizer (Android's own, so the number of bands depends on the phone); crossfade is not available on mobile yet
 - **Device picker** — control the PC's playback from the phone (or the other way round), or move what is playing between them
 
 ### Infrastructure

@@ -52,3 +52,12 @@ Podcasts / audiobooks (separate domain) · real-time collaborative playlists · 
 
 ## RiffPlayer Connect (multi-device control) — implemented
 A user's devices register with the server, see each other, mirror what is playing and control it; only one device plays at a time (Spotify-Connect semantics). Web and Android; third-party Subsonic clients can't take part. Phase 1 scope: device list, transfer playback, remote play/pause/next/previous/seek, live "now playing" mirror, "Continue here" when the playing device disappears, resume of the last session. Phase 2: remote volume, remote queue view and editing (jump, remove, reorder, add next/at the end). Later: a desktop app; never: shared sessions between users, smart-speaker protocols, push wake-up of a closed app (needs a third-party push service). Full design, decisions and the security review: [`CONNECT-DESIGN.md`](CONNECT-DESIGN.md).
+
+---
+
+## Looks and Hi-Fi — implemented
+- **Themes:** dark / light / system on web and Android, palette = amber on deep navy (dark) or warm cream (light), built from one set of colour variables (`web/src/index.css`, `mobile/lib/app_colors.dart`). Deliberately unlike Spotify green, Apple red, Tidal teal or Plex orange.
+- **Interface styles** (their own fixed palettes, so the dark/light choice does not apply to them): iPod Classic (silver, glossy blue, Cover Flow album browsing), Winamp (metal grey, LED green, bevels), Windows Vista / Media Player 11 (Aero glass, glossy blue orb). Add new ones in `web/src/store/uiStyle.ts` + a CSS block; on mobile in `AppSkin` + a palette.
+- **Hi-Fi inspired by TIDAL, for your own files:** quality badge and signal path; Hi-Res (lossless above 16-bit / 48 kHz) and Lossless filters; ReplayGain off / track / album with pre-amp; gapless playback; crossfade (web only); equalizer (web: 10 bands via Web Audio, same-origin audio only; Android: the phone's own bands); credits from file tags. We never claim bit-perfect output: the browser or phone does the final mixing.
+- **Other:** logo intro animation, enlargeable album cover (web), playlist cover mosaics, All Songs genre / sort / quality filters, pull-down-to-close player and mini-player flick (mobile).
+
