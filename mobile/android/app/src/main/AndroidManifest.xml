@@ -14,6 +14,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
+    <!-- Lets the app read the NAME of the connected Bluetooth speaker (to show "Bluetooth: JBL Flip 6").
+         It never connects, scans for or pairs devices. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+
     <application
         android:label="RiffPlayer"
         android:name="${applicationName}"

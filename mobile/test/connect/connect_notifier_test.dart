@@ -90,6 +90,7 @@ class FakeConnectApi implements ConnectApi {
   final commandArgs = <CommandArgs?>[];
   final transfers = <(String, String)>[];
   final renames = <(String, String)>[];
+  final outputs = <(String, String?)>[];
   final identities = <DeviceIdentity>[];
   final pollSinces = <int?>[];
   final streams = <StreamController<String>>[];
@@ -170,6 +171,12 @@ class FakeConnectApi implements ConnectApi {
   @override
   Future<bool> renameDevice(String deviceId, String name) async {
     renames.add((deviceId, name));
+    return true;
+  }
+
+  @override
+  Future<bool> setOutput(String deviceId, String? output) async {
+    outputs.add((deviceId, output));
     return true;
   }
 
@@ -410,6 +417,30 @@ void main() {
       expect(h.state.deviceName, 'x' * 40);
       expect(h.prefs.name, 'x' * 40);
       expect(h.api.renames, [(me, 'x' * 40)]);
+    });
+
+    fakeTest(
+        'tells the server where the sound comes out, now and when it changes',
+        (h) {
+      h.connect
+          .setOutput('Bluetooth: JBL Flip 6'); // reported before connecting…
+      h.startOnline();
+      h.tick();
+      expect(h.api.outputs,
+          [(me, 'Bluetooth: JBL Flip 6')]); // …is sent once online
+
+      h.connect.setOutput(null); // back to the phone's own speaker
+      h.tick();
+      expect(h.api.outputs.last, (me, null));
+    });
+
+    fakeTest('nothing is sent about the output while offline', (h) {
+      h.prefs.id = me;
+      h.connect.init();
+      h.tick();
+      h.connect.setOutput('Headphones');
+      h.tick();
+      expect(h.api.outputs, isEmpty);
     });
 
     fakeTest('rename works offline too, and ignores a blank name', (h) {

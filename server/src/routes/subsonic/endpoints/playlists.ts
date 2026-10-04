@@ -10,7 +10,7 @@ const str = (v: string | string[] | undefined): string | undefined => (Array.isA
 
 const SONG_COLS = `${SONG_SELECT_LIST}${SONG_FROM}`;
 
-interface PlaylistRow {
+export interface PlaylistRow {
   id: number;
   name: string;
   owner: string;
@@ -26,7 +26,7 @@ interface PlaylistRow {
   cover_sig: string | null;
 }
 
-function playlistAttrs(row: PlaylistRow, userId: number) {
+export function playlistAttrs(row: PlaylistRow, userId: number) {
   return {
     id: String(row.id),
     name: row.name,
@@ -50,7 +50,7 @@ function playlistAttrs(row: PlaylistRow, userId: number) {
   };
 }
 
-const PLAYLIST_QUERY = `
+export const PLAYLIST_QUERY = `
   SELECT p.id, p.name, p.owner_id, p.is_public, p.created_at, p.updated_at, p.cover_path, p.description,
          u.username AS owner,
          (SELECT GROUP_CONCAT(track_id, '.') FROM (

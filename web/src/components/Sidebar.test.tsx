@@ -51,6 +51,7 @@ beforeEach(() => {
   vi.spyOn(subsonic, 'getPlaylists').mockResolvedValue([]);
   vi.spyOn(subsonic, 'getLibrarySidebarState').mockResolvedValue([]);
   vi.spyOn(subsonic, 'adminGetSettings').mockResolvedValue({});
+  vi.spyOn(subsonic, 'getSocialStatus').mockResolvedValue(false);
   vi.spyOn(subsonic, 'createPlaylistWithName').mockResolvedValue(pl('9', 'x'));
   vi.spyOn(subsonic, 'pinLibraryItem').mockResolvedValue(undefined);
   vi.spyOn(subsonic, 'unpinLibraryItem').mockResolvedValue(undefined);
@@ -210,5 +211,18 @@ describe('Sidebar donation link', () => {
     await waitFor(() => expect(subsonic.adminGetSettings).toHaveBeenCalled());
 
     expect(screen.getByRole('link', { name: /support riffplayer/i })).toBeInTheDocument();
+  });
+});
+
+describe('People entry', () => {
+  it('appears only while social features are on', async () => {
+    const { unmount } = renderSidebar();
+    await waitFor(() => expect(subsonic.getSocialStatus).toHaveBeenCalled());
+    expect(screen.queryByRole('link', { name: 'People' })).not.toBeInTheDocument();
+    unmount();
+
+    vi.spyOn(subsonic, 'getSocialStatus').mockResolvedValue(true);
+    renderSidebar();
+    expect(await screen.findByRole('link', { name: 'People' })).toHaveAttribute('href', '/people');
   });
 });

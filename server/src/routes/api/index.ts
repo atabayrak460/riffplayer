@@ -16,6 +16,7 @@ import { connectPlugin } from './connect.js';
 import { tracksPlugin } from './tracks.js';
 import { sharePlugin } from './share.js';
 import { radioPlugin } from './radio.js';
+import { socialPlugin } from './social.js';
 
 // ── Plugin ────────────────────────────────────────────────────────────────────
 // Each area of the custom REST API lives in its own file (auth, me, admin/*,
@@ -32,6 +33,7 @@ export async function apiPlugin(app: FastifyInstance): Promise<void> {
   app.register(adminTracksPlugin);
   app.register(playlistsPlugin);
   app.register(artistsPlugin);
+  app.register(socialPlugin); // profiles, avatars, people (each route does its own auth)
 
   // Recommendations & Wrapped — all require auth, registered under /recommendations/*
   app.register(async (reco) => {

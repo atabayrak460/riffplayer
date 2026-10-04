@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
+import '../services/audio_output.dart';
 import 'connect_notifier.dart';
 import 'connect_prefs.dart';
 
@@ -24,6 +25,10 @@ final connectProvider =
     onRevoked: () => ref.read(authProvider.notifier).logout(),
     showMessage: _showRootMessage,
   );
+  // Tell the other devices where this phone's sound goes (Bluetooth speaker, headphones, …).
+  ref.listen<AudioOutput>(
+      audioOutputProvider, (_, o) => notifier.setOutput(o.label),
+      fireImmediately: true);
   // A failed read of the stored identity just leaves the id empty until the next start() retries it.
   notifier.init().catchError((_) {});
   return notifier;

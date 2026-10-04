@@ -4,6 +4,8 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DevicePicker } from './DevicePicker';
 import { useConnectStore } from '../store/connect';
+import { useAudioOutputStore } from '../store/audioOutput';
+import * as outputLib from '../lib/audioOutput';
 import type { DeviceInfo } from '../api/connect';
 
 const ME = 'me-device-0001';
@@ -24,6 +26,10 @@ const items = () => screen.getAllByRole('menuitem');
 
 beforeEach(() => {
   transferTo.mockReset();
+  vi.restoreAllMocks();
+  localStorage.clear();
+  useAudioOutputStore.setState({ deviceId: null, label: null });
+  vi.spyOn(outputLib, 'outputSwitchingSupported').mockReturnValue(true);
 });
 
 describe('DevicePicker', () => {
@@ -165,5 +171,56 @@ describe('DevicePicker', () => {
     await open();
     await userEvent.click(document.body);
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  describe('audio output', () => {
+    it('shows other devices\' outputs next to their names', async () => {
+      setup({ devices: [device(ME), device('b-phone-000001', { name: 'Pixel', type: 'android', output: 'Bluetooth: JBL Flip 6' })] });
+      await open();
+      expect(screen.getByText(/Android · Bluetooth: JBL Flip 6/)).toBeInTheDocument();
+    });
+
+    it('says the output is the system default until one is chosen', async () => {
+      setup({ devices: [device(ME)] });
+      await open();
+      const section = screen.getByLabelText('Audio output');
+      expect(within(section).getByText('System default')).toBeInTheDocument();
+    });
+
+    it('uses the browser\'s own output picker when it has one', async () => {
+      vi.spyOn(outputLib, 'promptForOutput').mockResolvedValue({ deviceId: 'dev-1', label: 'JBL Flip 6' });
+      setup({ devices: [device(ME)] });
+      await open();
+      await userEvent.click(screen.getByRole('button', { name: 'Change…' }));
+
+      expect(useAudioOutputStore.getState()).toMatchObject({ deviceId: 'dev-1', label: 'JBL Flip 6' });
+      expect(within(screen.getByLabelText('Audio output')).getByText('JBL Flip 6')).toBeInTheDocument();
+    });
+
+    it('otherwise lists the outputs it knows, and can go back to the default', async () => {
+      vi.spyOn(outputLib, 'promptForOutput').mockResolvedValue(null);
+      vi.spyOn(outputLib, 'listOutputs').mockResolvedValue([
+        { deviceId: 'a', label: 'Headphones' }, { deviceId: 'b', label: 'TV speakers' },
+      ]);
+      setup({ devices: [device(ME)] });
+      await open();
+      await userEvent.click(screen.getByRole('button', { name: 'Change…' }));
+
+      const list = await screen.findByRole('listbox', { name: 'Available outputs' });
+      await userEvent.click(within(list).getByRole('option', { name: 'TV speakers' }));
+      expect(useAudioOutputStore.getState().deviceId).toBe('b');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Change…' }));
+      await userEvent.click(within(await screen.findByRole('listbox')).getByRole('option', { name: 'System default' }));
+      expect(useAudioOutputStore.getState().deviceId).toBeNull();
+    });
+
+    it('explains when the browser cannot switch outputs', async () => {
+      vi.spyOn(outputLib, 'outputSwitchingSupported').mockReturnValue(false);
+      setup({ devices: [device(ME)] });
+      await open();
+      expect(screen.queryByRole('button', { name: 'Change…' })).not.toBeInTheDocument();
+      expect(screen.getByText(/can't switch the output here/)).toBeInTheDocument();
+    });
   });
 });

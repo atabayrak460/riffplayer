@@ -600,3 +600,81 @@ class LibrarySidebarItem {
             DateTime.fromMillisecondsSinceEpoch(0),
       );
 }
+
+/// A member of this server, as other members see them.
+class Person {
+  const Person({
+    required this.id,
+    required this.username,
+    required this.displayName,
+    this.bio,
+    this.hasAvatar = false,
+    this.avatarVersion,
+    this.isMe = false,
+    this.nowListening,
+    this.publicPlaylistCount = 0,
+    this.playlists = const [],
+  });
+
+  final int id;
+  final String username;
+  final String displayName;
+  final String? bio;
+  final bool hasAvatar;
+  final int? avatarVersion;
+  final bool isMe;
+
+  /// What they are playing right now — only present if they chose to share it.
+  final Song? nowListening;
+  final int publicPlaylistCount;
+
+  /// Only on a full profile: their public playlists (all of them, for your own).
+  final List<Playlist> playlists;
+
+  factory Person.fromJson(Map<String, dynamic> j) => Person(
+        id: (j['id'] as num).toInt(),
+        username: j['username'] as String,
+        displayName: j['displayName'] as String? ?? j['username'] as String,
+        bio: j['bio'] as String?,
+        hasAvatar: j['hasAvatar'] as bool? ?? false,
+        avatarVersion: (j['avatarVersion'] as num?)?.toInt(),
+        isMe: j['isMe'] as bool? ?? false,
+        nowListening: j['nowListening'] == null
+            ? null
+            : Song.fromJson(j['nowListening'] as Map<String, dynamic>),
+        publicPlaylistCount: (j['publicPlaylistCount'] as num?)?.toInt() ?? 0,
+        playlists: [
+          for (final p in (j['playlists'] as List<dynamic>? ?? const []))
+            Playlist.fromJson(p as Map<String, dynamic>)
+        ],
+      );
+}
+
+/// The signed-in user's own profile settings.
+class MyProfile {
+  const MyProfile({
+    this.displayName,
+    this.bio,
+    this.hasAvatar = false,
+    this.avatarVersion,
+    this.showListening = false,
+  });
+
+  final String? displayName;
+  final String? bio;
+  final bool hasAvatar;
+  final int? avatarVersion;
+
+  /// Off by default — a user turns it on themselves.
+  final bool showListening;
+
+  factory MyProfile.fromJson(Map<String, dynamic>? j) => j == null
+      ? const MyProfile()
+      : MyProfile(
+          displayName: j['displayName'] as String?,
+          bio: j['bio'] as String?,
+          hasAvatar: j['hasAvatar'] as bool? ?? false,
+          avatarVersion: (j['avatarVersion'] as num?)?.toInt(),
+          showListening: j['showListening'] as bool? ?? false,
+        );
+}

@@ -4,7 +4,9 @@ import { useDownloadsStore } from './downloads';
 import { getTrackAudioBlob } from '../lib/offlineDb';
 import { replayGainLinear, usePlaybackStore } from './playback';
 import { useEqualizerStore } from './equalizer';
-import { attachEqualizer, updateEqualizer } from '../lib/equalizer';
+import { useAudioOutputStore } from './audioOutput';
+import { useToastStore } from './toast';
+import { attachEqualizer, setEqualizerOutput, updateEqualizer } from '../lib/equalizer';
 import type { Song } from '../api/types';
 
 // Audio lives outside React's render cycle. There is one *active* element, and — once gapless
@@ -168,6 +170,20 @@ function outputVolume(song: Song | null, userVolume: number): number {
   return Math.min(1, Math.max(0, userVolume * replayGainLinear(song, replayGain, preampDb)));
 }
 
+type SinkElement = HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
+
+/** Points an element at the chosen output device ('' = the system default). Returns false if the browser refused. */
+async function applyOutput(el: HTMLAudioElement, deviceId: string | null): Promise<boolean> {
+  const sink = el as SinkElement;
+  if (typeof sink.setSinkId !== 'function') return true; // nothing to switch (or nothing chosen)
+  try {
+    await sink.setSinkId(deviceId ?? '');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function stopFade(): void {
   if (fadeTimer) clearInterval(fadeTimer);
   fadeTimer = null;
@@ -208,6 +224,7 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
       if (!spare) {
         spare = makeAudio();
         bindAudioEvents(spare);
+        void applyOutput(spare, useAudioOutputStore.getState().deviceId);
       }
       spare.pause();
       if (useEqualizerStore.getState().enabled) attachEqualizer(spare);
@@ -281,6 +298,23 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
     });
   }
   bindAudioEvents(audio);
+
+  // Audio output device (speakers / headphones / Bluetooth): the choice applies to both elements.
+  async function syncOutput(): Promise<void> {
+    const { deviceId } = useAudioOutputStore.getState();
+    setEqualizerOutput(deviceId);
+    const targets = spare ? [audio, spare] : [audio];
+    const results = await Promise.all(targets.map((el) => applyOutput(el, deviceId)));
+    if (deviceId && results.includes(false)) {
+      // The device is gone (unplugged, Bluetooth off): fall back to the default rather than playing into nothing.
+      useAudioOutputStore.getState().useDefault();
+      useToastStore.getState().show('That audio output isn’t available — switched back to the default.');
+    }
+  }
+  useAudioOutputStore.subscribe((state, prev) => {
+    if (state.deviceId !== prev.deviceId) void syncOutput();
+  });
+  if (useAudioOutputStore.getState().deviceId) void syncOutput();
 
   // Equalizer: wire the elements into the audio graph while it is on, and push band changes into it.
   function syncEqualizer(): void {

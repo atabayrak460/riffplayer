@@ -36,6 +36,8 @@ export interface DeviceInfo {
   online: boolean;
   unreachable: boolean;
   active: boolean;
+  /** Where this device's sound comes out ("Bluetooth: JBL Flip 6"); absent for its own speaker. */
+  output?: string;
 }
 
 export interface PublicState {
@@ -216,6 +218,12 @@ export async function transferPlayback(deviceId: string, toDeviceId: string, pla
 
 export async function renameDevice(deviceId: string, name: string): Promise<boolean> {
   const res = await post('device', { deviceId, name }, 'PATCH');
+  return !!res?.ok;
+}
+
+/** Tells the user's other devices where this one's sound comes out (null = its own speaker). */
+export async function setDeviceOutput(deviceId: string, output: string | null): Promise<boolean> {
+  const res = await post('device', { deviceId, output }, 'PATCH');
   return !!res?.ok;
 }
 

@@ -8,7 +8,9 @@ import '../providers/providers.dart';
 import '../utils/snackbar.dart';
 import '../widgets/device_picker.dart';
 import '../app_colors.dart';
+import 'package:image_picker/image_picker.dart';
 import '../audio/replay_gain.dart';
+import '../widgets/avatar.dart';
 import '../audio/equalizer_model.dart';
 import '../providers/equalizer_provider.dart';
 import '../providers/playback_settings_provider.dart';
@@ -88,6 +90,8 @@ class SettingsScreen extends ConsumerWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 24),
+            const _ProfileSection(),
             const SizedBox(height: 24),
             const _AppearanceSection(),
             const SizedBox(height: 24),
@@ -249,6 +253,159 @@ class _PasswordSectionState extends ConsumerState<_PasswordSection> {
           Text(_error!,
               style: TextStyle(color: AppColors.danger, fontSize: 12)),
         ],
+      ],
+    );
+  }
+}
+
+/// Profile: picture, name, about text, "show what I'm listening to" (off by default) and a way to
+/// the other people on this server.
+class _ProfileSection extends ConsumerStatefulWidget {
+  const _ProfileSection();
+
+  @override
+  ConsumerState<_ProfileSection> createState() => _ProfileSectionState();
+}
+
+class _ProfileSectionState extends ConsumerState<_ProfileSection> {
+  final _name = TextEditingController();
+  final _bio = TextEditingController();
+  bool _loaded = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _bio.dispose();
+    super.dispose();
+  }
+
+  Future<void> _run(Future<void> Function() job) async {
+    try {
+      await job();
+      setState(() => _error = null);
+      ref.invalidate(myProfileProvider);
+      ref.invalidate(peopleProvider);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'That didn\'t work. Please try again.');
+      }
+    }
+  }
+
+  Future<void> _pickPicture() async {
+    final client = ref.read(apiClientProvider);
+    if (client == null) return;
+    final picked = await ImagePicker()
+        .pickImage(source: ImageSource.gallery, imageQuality: 90);
+    if (picked == null) return;
+    await _run(() => client.uploadAvatar(picked.path));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final client = ref.watch(apiClientProvider);
+    final me = ref.watch(authProvider).valueOrNull;
+    final profile = ref.watch(myProfileProvider).valueOrNull;
+    final socialOn = ref.watch(socialEnabledProvider).valueOrNull ?? false;
+    final user = ref.watch(meProvider).valueOrNull;
+    if (client == null || me == null || profile == null || user == null) {
+      return const SizedBox.shrink();
+    }
+    if (!_loaded) {
+      _loaded = true;
+      _name.text = profile.displayName ?? '';
+      _bio.text = profile.bio ?? '';
+    }
+    final shown = profile.displayName ?? me.username;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionLabel('Profile'),
+        const SizedBox(height: 8),
+        if (!socialOn)
+          Text(
+              'An admin has turned social features off on this server, so others can\'t see your profile.',
+              style: TextStyle(color: AppColors.muted, fontSize: 12)),
+        Row(
+          children: [
+            Avatar(
+                userId: user.id,
+                name: shown,
+                hasAvatar: profile.hasAvatar,
+                version: profile.avatarVersion,
+                size: 64),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Wrap(
+                spacing: 8,
+                children: [
+                  TextButton(
+                    onPressed: _pickPicture,
+                    child: Text(
+                        profile.hasAvatar ? 'Change picture' : 'Add a picture'),
+                  ),
+                  if (profile.hasAvatar)
+                    TextButton(
+                      onPressed: () => _run(client.deleteAvatar),
+                      child: const Text('Remove'),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _name,
+          maxLength: 40,
+          decoration:
+              InputDecoration(labelText: 'Display name', hintText: me.username),
+        ),
+        TextField(
+          controller: _bio,
+          maxLength: 200,
+          maxLines: 2,
+          decoration: const InputDecoration(labelText: 'About you'),
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton(
+            onPressed: () => _run(() => client.updateMyProfile(
+                  displayName:
+                      _name.text.trim().isEmpty ? null : _name.text.trim(),
+                  bio: _bio.text.trim().isEmpty ? null : _bio.text.trim(),
+                  clearDisplayName: _name.text.trim().isEmpty,
+                  clearBio: _bio.text.trim().isEmpty,
+                )),
+            child: const Text('Save profile'),
+          ),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Show what I\'m listening to'),
+          subtitle: Text(
+            'Off by default. When on, other people on this server can see the song you are playing '
+            'right now. Only your public playlists are ever visible to others. (The server admin can '
+            'already read the play history on their own server — this doesn\'t change that.)',
+            style: TextStyle(color: AppColors.muted, fontSize: 12),
+          ),
+          value: profile.showListening,
+          onChanged: (v) =>
+              _run(() => client.updateMyProfile(showListening: v)),
+        ),
+        if (_error != null)
+          Text(_error!,
+              style: TextStyle(color: AppColors.danger, fontSize: 12)),
+        if (socialOn)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.people),
+            title: const Text('People on this server'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/people'),
+          ),
       ],
     );
   }

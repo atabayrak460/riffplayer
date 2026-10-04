@@ -365,6 +365,65 @@ class SubsonicClient {
     return response.data ?? {};
   }
 
+  // ── Social: people, profiles, avatars ───────────────────────────────────────
+
+  Future<bool> getSocialEnabled() async {
+    try {
+      final r = await _apiCall('GET', 'social/status');
+      return r['enabled'] as bool? ?? false;
+    } catch (_) {
+      return false; // an older server without social features
+    }
+  }
+
+  Future<List<Person>> getPeople() async {
+    final r = await _apiCall('GET', 'social/people');
+    return [
+      for (final p in (r['people'] as List<dynamic>? ?? const []))
+        Person.fromJson(p as Map<String, dynamic>)
+    ];
+  }
+
+  Future<Person> getPerson(int id) async {
+    final r = await _apiCall('GET', 'social/people/$id');
+    return Person.fromJson(r['profile'] as Map<String, dynamic>);
+  }
+
+  Future<MyProfile> getMyProfile() async {
+    final r = await _apiCall('GET', 'users/me');
+    return MyProfile.fromJson(r['profile'] as Map<String, dynamic>?);
+  }
+
+  Future<void> updateMyProfile({
+    String? displayName,
+    String? bio,
+    bool? showListening,
+    bool clearDisplayName = false,
+    bool clearBio = false,
+  }) =>
+      _apiCall('PATCH', 'users/me/profile', data: {
+        if (displayName != null || clearDisplayName) 'displayName': displayName,
+        if (bio != null || clearBio) 'bio': bio,
+        if (showListening != null) 'showListening': showListening,
+      });
+
+  Future<void> uploadAvatar(String filePath) async {
+    final form =
+        FormData.fromMap({'file': await MultipartFile.fromFile(filePath)});
+    await _apiCall('POST', 'users/me/avatar', data: form);
+  }
+
+  Future<void> deleteAvatar() => _apiCall('DELETE', 'users/me/avatar');
+
+  /// URL of a member's avatar for an Image widget; [version] makes it refetch after a change.
+  String avatarUrl(int userId, int? version) {
+    final params = {..._authParams(), 'v': '${version ?? 0}'};
+    final query = params.entries
+        .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
+        .join('&');
+    return '${credentials.serverUrl}/api/v1/social/avatar/$userId?$query';
+  }
+
   // ── Weekly discovery (names only) ───────────────────────────────────────────
 
   Future<WeeklyDiscovery> getWeeklyDiscovery() async =>

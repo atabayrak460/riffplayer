@@ -9,6 +9,7 @@ import { create } from 'zustand';
 import { usePlayerStore, remote as remoteRegistry, currentPlayCounted, type RemoteController } from './player';
 import { useAuthStore } from './auth';
 import { useToastStore } from './toast';
+import { useAudioOutputStore } from './audioOutput';
 import * as api from '../api/connect';
 import { savePlayQueue, getPlayQueue } from '../api/subsonic';
 import type { CommandArgs, CommandInstruction, DeviceInfo, DeviceIdentity, LoadInstruction, PublicState, Snapshot } from '../api/connect';
@@ -420,11 +421,25 @@ export const useConnectStore = create<ConnectState>()((set, get) => {
     }
   }
 
+  /** Tells the user's other devices where this one's sound comes out (nothing if it is the default speaker). */
+  async function reportOutput(): Promise<void> {
+    if (get().status !== 'online') return;
+    try {
+      await api.setDeviceOutput(get().deviceId, useAudioOutputStore.getState().label);
+    } catch {
+      // purely informational
+    }
+  }
+  useAudioOutputStore.subscribe((state, prev) => {
+    if (state.label !== prev.label) void reportOutput();
+  });
+
   function handle(name: string, data: unknown): void {
     switch (name) {
       case 'hello': {
         serverOffsetMs = (data as { serverTimeMs: number }).serverTimeMs - Date.now();
         set({ status: 'online' });
+        void reportOutput(); // the others should know where this device's sound goes
         break;
       }
       case 'snapshot': {

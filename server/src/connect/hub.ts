@@ -51,6 +51,8 @@ export interface DeviceInfo {
   /** Offline for longer than the grace period — controllers may offer "Continue here". */
   unreachable: boolean;
   active: boolean;
+  /** Where this device's sound comes out right now ("Bluetooth: JBL Flip 6"); absent for its own speaker. */
+  output?: string;
 }
 
 export interface PublicState {
@@ -158,6 +160,8 @@ interface Device {
   buffer: { seq: number; event: ConnectEvent }[];
   wake?: () => void;
   lastSeen: number;
+  /** The audio output the device itself reported (a label, never an address). */
+  output?: string;
 }
 
 interface Ghost {
@@ -551,6 +555,19 @@ export class ConnectHub {
     return 'ok';
   }
 
+  /** A device tells the others where its sound goes (empty = its own speaker). Same sanitising and rate limit as renaming. */
+  setOutput(userId: number, deviceId: string, output: string | null): 'ok' | 'unknown_device' | 'rate_limited' {
+    const hub = this.users.get(userId);
+    const device = hub?.devices.get(deviceId);
+    if (!hub || !device) return 'unknown_device';
+    const next = output ? sanitizeName(output, '') || undefined : undefined; // capped like a device name
+    if (next === device.output) return 'ok'; // nothing changed: nothing to broadcast, nothing to rate-limit
+    if (!this.allow(hub, 'rename')) return 'rate_limited';
+    device.output = next;
+    this.broadcastDevices(hub);
+    return 'ok';
+  }
+
   /** Whether this user may fetch the full queue now (it costs up to MAX_QUEUE_IDS song lookups). */
   allowQueueRead(userId: number): boolean {
     const hub = this.users.get(userId);
@@ -839,6 +856,7 @@ export class ConnectHub {
       online: true,
       unreachable: false,
       active: hub.activeDeviceId === d.id,
+      ...(d.output ? { output: d.output } : {}),
     }));
     if (hub.ghost) {
       list.push({

@@ -12,6 +12,12 @@ class FakeAudio {
   currentTime = 0;
   duration = 0;
   readyState = 4;
+  sink = '';
+  static failSink = false;
+  async setSinkId(id: string) {
+    if (FakeAudio.failSink) throw new DOMException('gone', 'NotFoundError');
+    this.sink = id;
+  }
   private listeners: Record<string, ((...a: unknown[]) => void)[]> = {};
   constructor() {
     FakeAudio.all.push(this);
@@ -44,6 +50,8 @@ vi.mock('../api/subsonic', async (importOriginal) => ({
 
 const { usePlayerStore } = await import('./player');
 const { usePlaybackStore, replayGainLinear } = await import('./playback');
+const { useAudioOutputStore } = await import('./audioOutput');
+const { useToastStore } = await import('./toast');
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 const song = (id: string, extra: Partial<Song> = {}): Song => ({
@@ -69,6 +77,8 @@ function nearEnd(secondsLeft: number) {
 
 beforeEach(() => {
   vi.useRealTimers();
+  FakeAudio.failSink = false;
+  useAudioOutputStore.setState({ deviceId: null, label: null });
   // The two elements are reused across tests: wipe what a previous test left on them.
   for (const a of FakeAudio.all) {
     a.src = '';
@@ -318,5 +328,42 @@ describe('crossfade', () => {
     nearEnd(3);
     vi.advanceTimersByTime(4500);
     expect(second.volume).toBeCloseTo(Math.pow(10, -6 / 20), 2);
+  });
+});
+
+describe('audio output device', () => {
+  it('points the playing element at the chosen output', async () => {
+    await startQueue([song('a')]);
+    useAudioOutputStore.getState().choose('speaker-1', 'JBL Flip 6');
+    await flush();
+    expect(playing()[0].sink).toBe('speaker-1');
+  });
+
+  it('a pre-loaded next track goes to the same output', async () => {
+    useAudioOutputStore.getState().choose('speaker-1', 'JBL');
+    await startQueue([song('a'), song('b')]);
+    nearEnd(10);
+    await flush();
+    const spare = FakeAudio.all.find((a) => a.src.endsWith('/b'))!;
+    expect(spare.sink).toBe('speaker-1');
+  });
+
+  it('going back to the default clears it', async () => {
+    await startQueue([song('a')]);
+    useAudioOutputStore.getState().choose('speaker-1', 'JBL');
+    await flush();
+    useAudioOutputStore.getState().useDefault();
+    await flush();
+    expect(playing()[0].sink).toBe('');
+  });
+
+  it('falls back to the default, and says so, when the device is gone', async () => {
+    await startQueue([song('a')]);
+    FakeAudio.failSink = true;
+    useAudioOutputStore.getState().choose('unplugged', 'Old speaker');
+    await flush();
+    await flush();
+    expect(useAudioOutputStore.getState().deviceId).toBeNull();
+    expect(useToastStore.getState().message).toMatch(/switched back to the default/);
   });
 });

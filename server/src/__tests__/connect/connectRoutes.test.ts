@@ -435,6 +435,10 @@ describe('state, commands and transfer between two devices', () => {
     const update = await phone.next('devices', (d) => d.devices.some((x: any) => x.name === 'Living room PC'));
     expect(update.data.devices.find((x: any) => x.id === PC).name).toBe('Living room PC');
     expect((await post(token, '/device', { deviceId: 'nobody-device-1', name: 'x' }, 'PATCH')).status).toBe(404);
+    // …and it may report where its sound comes out (null / '' = its own speaker)
+    expect(await post(token, '/device', { deviceId: PC, output: 'Bluetooth: JBL' }, 'PATCH')).toEqual({ status: 200, body: { ok: true } });
+    expect(await post(token, '/device', { deviceId: PC, output: null }, 'PATCH')).toEqual({ status: 200, body: { ok: true } });
+    expect((await post(token, '/device', { deviceId: PC, output: 42 }, 'PATCH')).status).toBe(400);
   });
 });
 

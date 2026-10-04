@@ -334,6 +334,78 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   return fetch(`${base}/api/v1/${path}`, { ...init, headers });
 }
 
+// ── Social: people, profiles, avatars ───────────────────────────────────────
+
+export interface Person {
+  id: number;
+  username: string;
+  displayName: string;
+  bio: string | null;
+  hasAvatar: boolean;
+  avatarVersion: number | null;
+  isMe: boolean;
+  /** What they are playing right now — only present if they chose to share it. */
+  nowListening: (Song & { startedAt: number }) | null;
+  publicPlaylistCount: number;
+}
+
+export interface Profile extends Person {
+  playlists: Playlist[];
+}
+
+export interface MyProfile {
+  displayName: string | null;
+  bio: string | null;
+  hasAvatar: boolean;
+  avatarVersion: number | null;
+  showListening: boolean;
+}
+
+export async function getSocialStatus(): Promise<boolean> {
+  try {
+    return ((await apiCall('GET', 'social/status')) as { enabled: boolean }).enabled;
+  } catch {
+    return false; // an older server without social features
+  }
+}
+
+export async function getPeople(): Promise<Person[]> {
+  return ((await apiCall('GET', 'social/people')) as { people: Person[] }).people;
+}
+
+export async function getPerson(id: number | string): Promise<Profile> {
+  return ((await apiCall('GET', `social/people/${encodeURIComponent(String(id))}`)) as { profile: Profile }).profile;
+}
+
+export async function getMyProfile(): Promise<MyProfile> {
+  const me = (await apiCall('GET', 'users/me')) as { profile?: MyProfile };
+  return me.profile ?? { displayName: null, bio: null, hasAvatar: false, avatarVersion: null, showListening: false };
+}
+
+export async function updateMyProfile(patch: { displayName?: string | null; bio?: string | null; showListening?: boolean }): Promise<void> {
+  await apiCall('PATCH', 'users/me/profile', patch);
+}
+
+export async function uploadAvatar(file: File): Promise<void> {
+  const form = new FormData();
+  form.append('file', file);
+  await apiCall('POST', 'users/me/avatar', undefined, form);
+}
+
+export async function deleteAvatar(): Promise<void> {
+  await apiCall('DELETE', 'users/me/avatar');
+}
+
+/** URL of a member's avatar for an <img>; `version` makes the browser refetch after a change. */
+export function avatarUrl(userId: number, version: number | null): string {
+  const creds = _creds;
+  if (!creds) return '';
+  const base = creds.serverUrl.replace(/\/$/, '');
+  const params = authParams(creds);
+  params.set('v', String(version ?? 0));
+  return `${base}/api/v1/social/avatar/${userId}?${params}`;
+}
+
 // ── Song radio ───────────────────────────────────────────────────────────────
 
 export type RadioSeedType = 'song' | 'artist' | 'album' | 'playlist';

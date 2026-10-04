@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useConnectStore } from '../store/connect';
 import type { DeviceInfo } from '../api/connect';
+import { useAudioOutputStore } from '../store/audioOutput';
+import { listOutputs, outputSwitchingSupported, promptForOutput, type OutputDevice } from '../lib/audioOutput';
 
 const TYPE_LABEL: Record<DeviceInfo['type'], string> = { web: 'Web', android: 'Android', desktop: 'Desktop' };
 
@@ -15,7 +17,75 @@ function subtitle(d: DeviceInfo, thisId: string): string {
   if (d.id === thisId) parts.push('This device');
   if (d.active && d.online) parts.push('Playing');
   if (!d.online) parts.push(d.unreachable ? 'Unreachable' : 'Reconnecting…');
+  if (d.output) parts.push(d.output);
   return parts.join(' · ');
+}
+
+/** "Audio output": where THIS browser's sound goes (speakers, headphones, a Bluetooth speaker). */
+function OutputSection() {
+  const label = useAudioOutputStore((s) => s.label);
+  const choose = useAudioOutputStore((s) => s.choose);
+  const useDefault = useAudioOutputStore((s) => s.useDefault);
+  const deviceId = useAudioOutputStore((s) => s.deviceId);
+  const [outputs, setOutputs] = useState<OutputDevice[] | null>(null);
+  const supported = outputSwitchingSupported();
+
+  const change = async () => {
+    // Chrome/Edge can show their own picker (and unlock the device names); otherwise list what is known.
+    const picked = await promptForOutput();
+    if (picked) {
+      choose(picked.deviceId, picked.label);
+      setOutputs(null);
+      return;
+    }
+    setOutputs(await listOutputs());
+  };
+
+  return (
+    <div className="mt-2 pt-2 border-t border-zinc-800 px-2" aria-label="Audio output">
+      <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-1">Audio output</p>
+      <p className="text-sm text-zinc-50 truncate">{label ?? 'System default'}</p>
+      {supported ? (
+        <>
+          <button type="button" onClick={() => void change()} className="text-xs text-brand hover:underline mt-1">
+            Change…
+          </button>
+          {outputs && (
+            <ul className="mt-1 space-y-0.5" role="listbox" aria-label="Available outputs">
+              <li>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={deviceId === null}
+                  onClick={() => { useDefault(); setOutputs(null); }}
+                  className="w-full text-left text-xs text-zinc-300 hover:text-zinc-50 py-1"
+                >
+                  System default
+                </button>
+              </li>
+              {outputs.map((o) => (
+                <li key={o.deviceId}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={deviceId === o.deviceId}
+                    onClick={() => { choose(o.deviceId, o.label); setOutputs(null); }}
+                    className="w-full text-left text-xs text-zinc-300 hover:text-zinc-50 py-1 truncate"
+                  >
+                    {o.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        <p className="text-xs text-zinc-500 mt-1">
+          This browser can&apos;t switch the output here — use your system&apos;s sound settings (Bluetooth speakers included).
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** Speaker button + popover to pick which of your devices plays (Spotify-Connect style). */
@@ -115,6 +185,8 @@ export function DevicePicker({ className = '' }: { className?: string }) {
           {status === 'online' && others.length === 0 && (
             <p className="px-2 py-2 text-xs text-zinc-400">Open RiffPlayer on another device to see it here.</p>
           )}
+
+          <OutputSection />
         </div>
       )}
     </div>

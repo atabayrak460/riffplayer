@@ -804,6 +804,7 @@ class ConnectNotifier extends StateNotifier<ConnectState>
         _serverOffsetMs = ((data as Map)['serverTimeMs'] as num).toInt() -
             _now().millisecondsSinceEpoch;
         state = state.copyWith(status: ConnectStatus.online);
+        _sendOutput(); // the others should know where this phone's sound goes
       case 'snapshot':
         final s = Snapshot.fromJson(Map<String, dynamic>.from(data! as Map));
         state = state.copyWith(
@@ -1109,6 +1110,23 @@ class ConnectNotifier extends StateNotifier<ConnectState>
 
   /// "Continue here" / "Play here".
   Future<void> transferHere() => transferTo(state.deviceId);
+
+  String? _output;
+
+  /// Called whenever the phone's audio output changes (speaker ↔ Bluetooth, …).
+  void setOutput(String? label) {
+    _output = label;
+    _sendOutput();
+  }
+
+  void _sendOutput() {
+    if (state.status != ConnectStatus.online) return;
+    final api = _api;
+    if (api != null) {
+      unawaited(
+          api.setOutput(state.deviceId, _output).catchError((_) => false));
+    }
+  }
 
   Future<void> renameThisDevice(String name) async {
     final clean = name.trim();

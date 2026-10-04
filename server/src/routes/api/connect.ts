@@ -249,10 +249,17 @@ export async function connectPlugin(app: FastifyInstance): Promise<void> {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const deviceId = deviceIdFrom(body);
     if (!deviceId) return bad(reply, DEVICE_ID_HELP);
-    if (typeof body.name !== 'string') return bad(reply, 'name required');
-    const r = hub.rename(req.subsonicUser!.id, deviceId, body.name);
-    if (r === 'unknown_device') return reply.code(404).send({ error: 'unknown_device' });
-    if (r === 'rate_limited') return reply.code(429).send({ error: 'rate_limited' });
+    const hasName = typeof body.name === 'string';
+    const hasOutput = body.output === null || typeof body.output === 'string';
+    if (!hasName && !hasOutput) return bad(reply, 'name or output required');
+    const userId = req.subsonicUser!.id;
+    // A device may rename itself, and/or tell the others where its sound comes out ('' or null = its own speaker).
+    const results = [
+      hasName ? hub.rename(userId, deviceId, body.name as string) : 'ok',
+      hasOutput ? hub.setOutput(userId, deviceId, (body.output as string | null) || null) : 'ok',
+    ];
+    if (results.includes('unknown_device')) return reply.code(404).send({ error: 'unknown_device' });
+    if (results.includes('rate_limited')) return reply.code(429).send({ error: 'rate_limited' });
     return { ok: true };
   });
 }

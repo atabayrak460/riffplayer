@@ -19,11 +19,22 @@ export async function mePlugin(app: FastifyInstance): Promise<void> {
         listenbrainz_token: string | null;
       } | undefined;
 
+    const profile = db
+      .prepare('SELECT display_name, bio, avatar_path, avatar_updated_at, show_listening FROM users WHERE id = ?')
+      .get(user.id) as { display_name: string | null; bio: string | null; avatar_path: string | null; avatar_updated_at: number | null; show_listening: number };
+
     reply.send({
       id: user.id,
       username: user.username,
       role: user.role,
       preferences: prefs ?? null,
+      profile: {
+        displayName: profile.display_name,
+        bio: profile.bio,
+        hasAvatar: !!profile.avatar_path,
+        avatarVersion: profile.avatar_updated_at,
+        showListening: profile.show_listening === 1,
+      },
     });
   });
 

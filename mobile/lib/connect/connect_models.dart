@@ -27,6 +27,9 @@ class DeviceInfo {
   final bool unreachable;
   final bool active;
 
+  /// Where this device's sound comes out ("Bluetooth: JBL Flip 6"); null for its own speaker.
+  final String? output;
+
   const DeviceInfo({
     required this.id,
     required this.name,
@@ -34,6 +37,7 @@ class DeviceInfo {
     required this.online,
     required this.unreachable,
     required this.active,
+    this.output,
   });
 
   factory DeviceInfo.fromJson(Map<String, dynamic> j) => DeviceInfo(
@@ -43,6 +47,7 @@ class DeviceInfo {
         online: j['online'] as bool? ?? true,
         unreachable: j['unreachable'] as bool? ?? false,
         active: j['active'] as bool? ?? false,
+        output: j['output'] as String?,
       );
 }
 

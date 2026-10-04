@@ -16,6 +16,9 @@ interface Graph {
 }
 
 let graph: Graph | null = null;
+// The chosen output device. Audio routed through the Web Audio graph ignores the <audio> elements' own
+// sink, so the context needs it too (AudioContext.setSinkId, Chrome/Edge 110+).
+let outputId: string | null = null;
 const attached = new WeakSet<HTMLAudioElement>();
 
 /** Whether the equalizer can work here: the browser has Web Audio and the server's audio is same-origin. */
@@ -48,7 +51,24 @@ function buildGraph(): Graph {
     node = f;
   }
   node.connect(ctx.destination);
+  void applyContextSink(ctx);
   return { ctx, input, preamp, filters };
+}
+
+async function applyContextSink(ctx: AudioContext): Promise<void> {
+  const sink = (ctx as AudioContext & { setSinkId?: (id: string) => Promise<void> }).setSinkId;
+  if (typeof sink !== 'function') return;
+  try {
+    await sink.call(ctx, outputId ?? '');
+  } catch {
+    // an unavailable device: the player resets the choice itself
+  }
+}
+
+/** Tells the equalizer's audio graph which output device to use (null = the default). */
+export function setEqualizerOutput(deviceId: string | null): void {
+  outputId = deviceId;
+  if (graph) void applyContextSink(graph.ctx);
 }
 
 /** Routes an audio element through the equalizer (idempotent). Returns false when unsupported. */
@@ -79,4 +99,5 @@ export function updateEqualizer(enabled: boolean, gains: number[]): void {
 /** Test hook: forget the graph so each test starts clean. */
 export function resetEqualizerForTests(): void {
   graph = null;
+  outputId = null;
 }

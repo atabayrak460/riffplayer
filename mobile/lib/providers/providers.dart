@@ -794,6 +794,31 @@ final recommendationsProvider = FutureProvider.autoDispose
   return client.getRecommendations(type);
 });
 
+final socialEnabledProvider = FutureProvider.autoDispose<bool>((ref) async {
+  final client = ref.read(apiClientProvider);
+  if (client == null) return false;
+  return client.getSocialEnabled();
+});
+
+final peopleProvider = FutureProvider.autoDispose<List<Person>>((ref) async {
+  final client = ref.read(apiClientProvider);
+  if (client == null) throw Exception('Not authenticated');
+  return client.getPeople();
+});
+
+final personProvider =
+    FutureProvider.autoDispose.family<Person, int>((ref, id) async {
+  final client = ref.read(apiClientProvider);
+  if (client == null) throw Exception('Not authenticated');
+  return client.getPerson(id);
+});
+
+final myProfileProvider = FutureProvider.autoDispose<MyProfile>((ref) async {
+  final client = ref.read(apiClientProvider);
+  if (client == null) throw Exception('Not authenticated');
+  return client.getMyProfile();
+});
+
 final weeklyDiscoveryProvider =
     FutureProvider.autoDispose<WeeklyDiscovery>((ref) async {
   final client = ref.read(apiClientProvider);

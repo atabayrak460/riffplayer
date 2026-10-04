@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/auth';
 import { usePanelSizesStore, SIDEBAR_MIN, SIDEBAR_MAX } from '../store/panelSizes';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  adminGetSettings, getPlaylists, createPlaylistWithName, getLibrarySidebarState,
+  adminGetSettings, getPlaylists, createPlaylistWithName, getLibrarySidebarState, getSocialStatus,
 } from '../api/subsonic';
 import { SidebarLibraryItem } from './SidebarLibraryItem';
 import { ResizeHandle } from './ResizeHandle';
@@ -24,6 +24,9 @@ const TOP_NAV = [
   { to: '/search', label: 'Search', icon: 'M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z' },
   { to: '/queue', label: 'Queue', icon: 'M4 6h16M4 12h10M4 18h7' },
 ];
+
+// Shown only while the admin has social features on.
+const PEOPLE_NAV = { to: '/people', label: 'People', icon: 'M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z' };
 
 // Fixed system entries in the unified Library list. `key` is the stable
 // item_key sent to the server for pin/recency state — kept distinct from the
@@ -60,6 +63,7 @@ export function Sidebar() {
   });
   const donationVisible = settings?.donation_prompt_enabled !== 'false';
 
+  const { data: socialEnabled = false } = useQuery({ queryKey: ['social-status'], queryFn: getSocialStatus });
   const { data: playlists = [] } = useQuery({ queryKey: ['playlists'], queryFn: getPlaylists });
   const { data: sidebarState = [] } = useQuery({
     queryKey: ['library-sidebar-state'],
@@ -96,7 +100,7 @@ export function Sidebar() {
 
       {/* Fixed top nav */}
       <nav className="px-2 space-y-0.5">
-        {TOP_NAV.map(({ to, label, icon }) => (
+        {(socialEnabled ? [...TOP_NAV, PEOPLE_NAV] : TOP_NAV).map(({ to, label, icon }) => (
           <NavLink key={to} to={to} className={libraryLinkClass}>
             <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d={icon} />

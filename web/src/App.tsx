@@ -11,6 +11,8 @@ import { AlbumsPage } from './pages/AlbumsPage';
 // Lazy-loaded: everything reachable only after navigating past the initial
 // login/albums landing. Admin pages in particular are only reachable by
 // admins but would otherwise ship in every user's initial bundle.
+const PeoplePage = lazy(() => import('./pages/PeoplePage').then((m) => ({ default: m.PeoplePage })));
+const PersonPage = lazy(() => import('./pages/PersonPage').then((m) => ({ default: m.PersonPage })));
 const HomePage = lazy(() => import('./pages/HomePage').then((m) => ({ default: m.HomePage })));
 const AlbumDetailPage = lazy(() => import('./pages/AlbumDetailPage').then((m) => ({ default: m.AlbumDetailPage })));
 const ArtistsPage = lazy(() => import('./pages/ArtistsPage').then((m) => ({ default: m.ArtistsPage })));
@@ -73,6 +75,8 @@ const router = createBrowserRouter([
           { path: 'downloaded/playlists/:id', element: <OfflinePlaylistPage /> },
           { path: 'discover', element: <RecommendationsPage /> },
           { path: 'wrapped', element: <WrappedPage /> },
+          { path: 'people', element: <PeoplePage /> },
+          { path: 'people/:id', element: <PersonPage /> },
           {
             path: 'settings',
             element: <UserSettingsPage />,

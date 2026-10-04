@@ -523,6 +523,40 @@ describe('rename, revoke and housekeeping', () => {
     expect(hub.rename(U1, 'nobody-device-1', 'x')).toBe('unknown_device');
   });
 
+  it('a device can tell the others where its sound comes out, and clear it again', () => {
+    const pc = join(U1, PC);
+    const phone = join(U1, PHONE, 'android');
+    pc.probe.clear();
+    phone.probe.clear();
+
+    expect(hub.setOutput(U1, PHONE, '  Bluetooth: JBL\u0000 Flip 6  ')).toBe('ok');
+    expect(pc.probe.last('devices')!.data.devices.find((d) => d.id === PHONE)!.output).toBe('Bluetooth: JBL Flip 6');
+
+    pc.probe.clear();
+    expect(hub.setOutput(U1, PHONE, null)).toBe('ok');
+    expect(pc.probe.last('devices')!.data.devices.find((d) => d.id === PHONE)!.output).toBeUndefined();
+    expect(hub.setOutput(U1, 'nobody-device-1', 'x')).toBe('unknown_device');
+  });
+
+  it('an unchanged output is not broadcast again, and long labels are cut', () => {
+    const pc = join(U1, PC);
+    join(U1, PHONE, 'android');
+    hub.setOutput(U1, PHONE, 'Speaker');
+    pc.probe.clear();
+    expect(hub.setOutput(U1, PHONE, 'Speaker')).toBe('ok');
+    expect(pc.probe.of('devices')).toHaveLength(0);
+
+    hub.setOutput(U1, PHONE, 'x'.repeat(500));
+    expect(pc.probe.last('devices')!.data.devices.find((d) => d.id === PHONE)!.output!.length).toBe(40); // capped like a device name
+  });
+
+  it('output reports are rate limited with renames', () => {
+    join(U1, PC);
+    let limited = 0;
+    for (let i = 0; i < 40; i++) if (hub.setOutput(U1, PC, `out ${i}`) === 'rate_limited') limited++;
+    expect(limited).toBeGreaterThan(0);
+  });
+
   it('revoke tells the user\'s devices, ends their streams and drops their state', () => {
     const pc = join(U1, PC);
     const other = join(U2, 'other-user-dev1');

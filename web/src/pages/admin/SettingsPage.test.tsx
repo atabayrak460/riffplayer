@@ -63,3 +63,21 @@ describe('SettingsPage — external metadata lookups', () => {
     await waitFor(() => expect(patch.mock.calls[0][0]).toEqual({ cover_lookup_enabled: 'false' }));
   });
 });
+
+describe('SettingsPage — social features', () => {
+  it('is on by default and saves "false" when switched off', async () => {
+    vi.spyOn(subsonic, 'adminGetSettings').mockResolvedValue({});
+    renderPage();
+    const toggle = await toggleFor(/see each other/i);
+    expect(toggle.className).toContain('bg-brand');
+
+    await userEvent.click(toggle);
+    await waitFor(() => expect(patch.mock.calls[0][0]).toEqual({ social_enabled: 'false' }));
+  });
+
+  it('shows as off when it was saved as "false"', async () => {
+    vi.spyOn(subsonic, 'adminGetSettings').mockResolvedValue({ social_enabled: 'false' });
+    renderPage();
+    expect((await toggleFor(/see each other/i)).className).not.toContain('bg-brand');
+  });
+});

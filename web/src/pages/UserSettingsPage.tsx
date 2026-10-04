@@ -7,6 +7,7 @@ import { useDownloadsStore, type DownloadTarget } from '../store/downloads';
 import { DeviceNameSection } from '../components/DeviceNameSection';
 import { AppearanceSection } from '../components/AppearanceSection';
 import { PlaybackSection } from '../components/PlaybackSection';
+import { ProfileSection } from '../components/ProfileSection';
 import { EqualizerSection } from '../components/EqualizerSection';
 
 // Fetch current user preferences via /api/v1/users/me
@@ -128,6 +129,8 @@ export function AccountSettingsPanel() {
   return (
     <div className="max-w-lg space-y-8">
       <p className="text-sm text-zinc-400 -mt-2">Signed in as {user?.username}</p>
+
+      <ProfileSection />
 
       <AppearanceSection />
 

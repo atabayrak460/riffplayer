@@ -52,6 +52,7 @@ export function SettingsPage() {
   const [donationEnabled, setDonationEnabled] = useState(true);
   const [lyricsLookup, setLyricsLookup] = useState(true);
   const [coverLookup, setCoverLookup] = useState(true);
+  const [socialEnabled, setSocialEnabled] = useState(true);
 
   useEffect(() => {
     if (!settings) return;
@@ -64,6 +65,7 @@ export function SettingsPage() {
     setDonationEnabled(settings.donation_prompt_enabled !== 'false');
     setLyricsLookup(settings.lyrics_lookup_enabled !== 'false');
     setCoverLookup(settings.cover_lookup_enabled !== 'false');
+    setSocialEnabled(settings.social_enabled !== 'false');
   }, [settings]);
 
   const save = (patch: Record<string, string | null>) => patchMut.mutate(patch);
@@ -112,6 +114,13 @@ export function SettingsPage() {
         </Field>
         <Field label="Look up album covers online (Cover Art Archive)" description="When an album has no embedded artwork, sends its MusicBrainz ID to coverartarchive.org. Your audio and listening history are never sent.">
           <Toggle checked={coverLookup} onChange={(v) => { setCoverLookup(v); save({ cover_lookup_enabled: v ? 'true' : 'false' }); }} />
+        </Field>
+      </section>
+
+      <section>
+        <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-3">Social</h3>
+        <Field label="Let people on this server see each other" description="Profiles, pictures, public playlists and an opt-in &quot;listening now&quot;. Each person chooses whether their listening is shown (off by default). Disabling hides all of it for everyone.">
+          <Toggle checked={socialEnabled} onChange={(v) => { setSocialEnabled(v); save({ social_enabled: v ? 'true' : 'false' }); }} />
         </Field>
       </section>
 

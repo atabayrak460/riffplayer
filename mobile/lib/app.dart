@@ -11,6 +11,7 @@ import 'screens/all_songs_screen.dart';
 import 'screens/album_detail_screen.dart';
 import 'screens/artists_screen.dart';
 import 'screens/artist_detail_screen.dart';
+import 'screens/people_screen.dart';
 import 'screens/search_screen.dart';
 import 'screens/favorites_screen.dart';
 import 'screens/downloads_screen.dart';
@@ -142,6 +143,12 @@ class _RiffPlayerAppState extends ConsumerState<RiffPlayerApp>
             ),
             GoRoute(
                 path: '/library', builder: (_, __) => const LibraryScreen()),
+            GoRoute(path: '/people', builder: (_, __) => const PeopleScreen()),
+            GoRoute(
+              path: '/people/:id',
+              builder: (_, state) =>
+                  PersonScreen(id: int.parse(state.pathParameters['id']!)),
+            ),
             GoRoute(
               path: '/playlists/:id',
               builder: (_, state) =>

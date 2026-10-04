@@ -1,3 +1,4 @@
+import '../services/audio_output.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../connect/connect_models.dart';
@@ -32,6 +33,7 @@ String deviceSubtitle(DeviceInfo d, String thisId) {
   if (d.id == thisId) parts.add('This device');
   if (d.active && d.online) parts.add('Playing');
   if (!d.online) parts.add(d.unreachable ? 'Unreachable' : 'Reconnecting…');
+  if (d.output != null) parts.add(d.output!);
   return parts.join(' · ');
 }
 
@@ -103,6 +105,7 @@ class DevicePickerSheet extends ConsumerWidget {
                 ),
               ),
             for (final d in list) _DeviceTile(device: d, state: s),
+            const _OutputSection(),
             // Another device is playing: its volume is controlled from here (this phone's own is its volume keys).
             if (s.remoteActive && (s.activeDevice?.online ?? false))
               _RemoteVolume(state: s),
@@ -337,6 +340,69 @@ class _DeviceNameSectionState extends ConsumerState<DeviceNameSection> {
             child: Text('Saved', style: TextStyle(color: _muted, fontSize: 12)),
           ),
       ],
+    );
+  }
+}
+
+/// "Audio output": where this phone's sound goes. Android lets only the system connect or switch
+/// Bluetooth outputs, so this shows the current one and opens the system switcher.
+class _OutputSection extends ConsumerWidget {
+  const _OutputSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final output = ref.watch(audioOutputProvider);
+    final service = ref.read(audioOutputServiceProvider);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('AUDIO OUTPUT',
+              style: TextStyle(
+                  color: _muted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2)),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(
+                  output.label == null
+                      ? Icons.volume_up
+                      : Icons.bluetooth_audio,
+                  size: 20,
+                  color: AppColors.text),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(output.label ?? 'Phone speaker',
+                    style: TextStyle(color: AppColors.text),
+                    overflow: TextOverflow.ellipsis),
+              ),
+              TextButton(
+                onPressed: () async {
+                  final opened = await service.openSwitcher();
+                  if (!opened && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text(
+                            'Open your phone\'s Bluetooth or sound settings to switch.')));
+                  }
+                },
+                child: const Text('Change'),
+              ),
+            ],
+          ),
+          if (output.needsPermission)
+            TextButton(
+              onPressed: () async {
+                await service.requestBluetoothPermission();
+                await ref.read(audioOutputProvider.notifier).refresh();
+              },
+              child: const Text('Show the speaker\'s name'),
+            ),
+        ],
+      ),
     );
   }
 }

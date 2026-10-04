@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +12,7 @@ import 'package:riffplayer_mobile/connect/connect_notifier.dart';
 import 'package:riffplayer_mobile/connect/connect_prefs.dart';
 import 'package:riffplayer_mobile/connect/connect_provider.dart';
 import 'package:riffplayer_mobile/providers/providers.dart';
+import 'package:riffplayer_mobile/services/audio_output.dart';
 import 'package:riffplayer_mobile/widgets/device_picker.dart';
 import 'package:riffplayer_mobile/widgets/mini_player.dart';
 
@@ -81,6 +84,31 @@ class SpyConnect extends ConnectNotifier {
   }
 }
 
+class _FakeOutput implements AudioOutputService {
+  AudioOutput output = const AudioOutput();
+  bool canOpen = true;
+  int opened = 0;
+  int permissionRequests = 0;
+  final _changes = StreamController<AudioOutput>.broadcast();
+
+  @override
+  Future<AudioOutput> current() async => output;
+  @override
+  Future<bool> openSwitcher() async {
+    opened++;
+    return canOpen;
+  }
+
+  @override
+  Future<void> requestBluetoothPermission() async {
+    permissionRequests++;
+    output = const AudioOutput(label: 'Bluetooth: JBL Flip 6');
+  }
+
+  @override
+  Stream<AudioOutput> get changes => _changes.stream;
+}
+
 Song _song(String id) => Song(
       id: id,
       title: 'Title $id',
@@ -100,6 +128,7 @@ void main() {
   late MockSubsonicClient client;
   late PlayerNotifier player;
   late SpyConnect connect;
+  late _FakeOutput outputService;
 
   setUp(() {
     handler = MockAudioHandler();
@@ -122,6 +151,7 @@ void main() {
         .thenAnswer((_) async {});
     player = PlayerNotifier(handler);
     connect = SpyConnect(player, downloads);
+    outputService = _FakeOutput();
   });
 
   void setConnect({
@@ -145,6 +175,7 @@ void main() {
         playerProvider.overrideWith((ref) => player),
         apiClientProvider.overrideWithValue(client),
         downloadServiceProvider.overrideWithValue(downloads),
+        audioOutputServiceProvider.overrideWithValue(outputService),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -174,6 +205,22 @@ void main() {
 
       expect(sorted.map((d) => d.name),
           ['My phone', 'Desk PC', 'Laptop', 'Old tablet']);
+    });
+
+    test(
+        'a device\'s output is part of its subtitle, and parsed from the server',
+        () {
+      final d = DeviceInfo.fromJson({
+        'id': 'x-0000000001',
+        'name': 'Pixel',
+        'type': 'android',
+        'output': 'Bluetooth: JBL',
+      });
+      expect(d.output, 'Bluetooth: JBL');
+      expect(deviceSubtitle(d, me), 'Android · Bluetooth: JBL');
+      expect(
+          DeviceInfo.fromJson({'id': 'y', 'name': 'n', 'type': 'web'}).output,
+          isNull);
     });
 
     test('sortDevices orders equals by name, ignoring case', () {
@@ -296,6 +343,71 @@ void main() {
       await tester.tap(find.byTooltip('Connect to a device'));
       await tester.pumpAndSettle();
     }
+
+    testWidgets(
+        'shows the phone speaker as the output until something else is connected',
+        (tester) async {
+      setConnect(devices: [device(me)]);
+      await open(tester);
+      expect(find.text('AUDIO OUTPUT'), findsOneWidget);
+      expect(find.text('Phone speaker'), findsOneWidget);
+    });
+
+    testWidgets(
+        'shows a connected Bluetooth speaker, and hands over to the system switcher',
+        (tester) async {
+      outputService.output = const AudioOutput(label: 'Bluetooth: JBL Flip 6');
+      setConnect(devices: [device(me)]);
+      await open(tester);
+      expect(find.text('Bluetooth: JBL Flip 6'), findsOneWidget);
+
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+      expect(outputService.opened, 1);
+    });
+
+    testWidgets('says what to do when the system switcher cannot be opened',
+        (tester) async {
+      outputService.canOpen = false;
+      setConnect(devices: [device(me)]);
+      await open(tester);
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+      expect(
+          find.textContaining('Bluetooth or sound settings'), findsOneWidget);
+    });
+
+    testWidgets(
+        'asks for permission to read the speaker\'s name, then shows it',
+        (tester) async {
+      outputService.output =
+          const AudioOutput(label: 'Bluetooth speaker', needsPermission: true);
+      setConnect(devices: [device(me)]);
+      await open(tester);
+
+      await tester.tap(find.text('Show the speaker\'s name'));
+      await tester.pumpAndSettle();
+
+      expect(outputService.permissionRequests, 1);
+      expect(find.text('Bluetooth: JBL Flip 6'), findsOneWidget);
+      expect(find.text('Show the speaker\'s name'), findsNothing);
+    });
+
+    testWidgets('shows other devices\' outputs in the list', (tester) async {
+      setConnect(devices: [
+        device(me),
+        const DeviceInfo(
+            id: phone,
+            name: 'Pixel',
+            type: DeviceType.android,
+            online: true,
+            unreachable: false,
+            active: false,
+            output: 'Headphones'),
+      ]);
+      await open(tester);
+      expect(find.text('Android · Headphones'), findsOneWidget);
+    });
 
     testWidgets('lists every device with its label', (tester) async {
       setConnect(

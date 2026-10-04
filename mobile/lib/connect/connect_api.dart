@@ -126,6 +126,9 @@ abstract class ConnectApi {
   Future<TransferResult> transfer(String deviceId, String toDeviceId,
       {bool play = true});
   Future<bool> renameDevice(String deviceId, String name);
+
+  /// Tells the other devices where this one's sound comes out (null = its own speaker).
+  Future<bool> setOutput(String deviceId, String? output);
   Future<QueueResult?> fetchQueue();
 }
 
@@ -297,6 +300,13 @@ class HttpConnectApi implements ConnectApi {
   Future<bool> renameDevice(String deviceId, String name) async {
     final res =
         await _send('PATCH', 'device', {'deviceId': deviceId, 'name': name});
+    return res != null && res.statusCode != null && res.statusCode! < 300;
+  }
+
+  @override
+  Future<bool> setOutput(String deviceId, String? output) async {
+    final res = await _send(
+        'PATCH', 'device', {'deviceId': deviceId, 'output': output});
     return res != null && res.statusCode != null && res.statusCode! < 300;
   }
 
