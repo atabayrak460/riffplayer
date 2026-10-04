@@ -29,6 +29,9 @@ class StateReport {
   final bool shuffle;
   final bool counted;
 
+  /// This device's player volume, 0.0–1.0.
+  final double volume;
+
   const StateReport({
     required this.deviceId,
     required this.queueIds,
@@ -38,6 +41,7 @@ class StateReport {
     required this.repeat,
     required this.shuffle,
     required this.counted,
+    this.volume = 1.0,
   });
 
   Map<String, Object?> toJson() => {
@@ -49,6 +53,7 @@ class StateReport {
         'repeat': loopModeToWire(repeat),
         'shuffle': shuffle,
         'counted': counted,
+        'volume': volume,
       };
 }
 
@@ -117,7 +122,7 @@ abstract class ConnectApi {
   /// [targetDeviceId] is the device the sender saw playing; the server refuses the command
   /// ([CommandResult.targetChanged]) if another device has taken over since.
   Future<CommandResult> sendCommand(String deviceId, CommandType type,
-      {int? positionMs, String? targetDeviceId});
+      {int? positionMs, String? targetDeviceId, CommandArgs? args});
   Future<TransferResult> transfer(String deviceId, String toDeviceId,
       {bool play = true});
   Future<bool> renameDevice(String deviceId, String name);
@@ -231,11 +236,12 @@ class HttpConnectApi implements ConnectApi {
 
   @override
   Future<CommandResult> sendCommand(String deviceId, CommandType type,
-      {int? positionMs, String? targetDeviceId}) async {
+      {int? positionMs, String? targetDeviceId, CommandArgs? args}) async {
     final res = await _send('POST', 'command', {
       'deviceId': deviceId,
       'commandId': newDeviceId(),
-      'type': type.name,
+      'type': type.wire,
+      ...?args?.toJson(),
       if (positionMs != null) 'positionMs': positionMs,
       if (targetDeviceId != null) 'targetDeviceId': targetDeviceId,
     });

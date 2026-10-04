@@ -55,6 +55,7 @@ void main() {
         'repeat': 'all',
         'shuffle': true,
         'counted': false,
+        'volume': 1.0,
       });
     });
 
@@ -183,6 +184,90 @@ void main() {
         expect(await api.transfer('dev-aaaaaaaa', 'dev-bbbbbbbb'), expected);
       });
     }
+  });
+
+  group('phase 2 commands', () {
+    test('send the snake_case wire name and only the arguments they carry',
+        () async {
+      adapter.responder = (_) => json(202, {'delivered': true});
+
+      await api.sendCommand('dev-12345678', CommandType.volume,
+          args: const CommandArgs(volume: 0.4));
+      var body = Map<String, dynamic>.from(adapter.last.data as Map);
+      expect((body['type'], body['volume']), ('volume', 0.4));
+      expect(body.containsKey('index'), isFalse);
+
+      await api.sendCommand('dev-12345678', CommandType.queueMove,
+          args: const CommandArgs(index: 4, to: 1, songId: 's4'));
+      body = Map<String, dynamic>.from(adapter.last.data as Map);
+      expect((body['type'], body['index'], body['to'], body['songId']),
+          ('queue_move', 4, 1, 's4'));
+
+      await api.sendCommand('dev-12345678', CommandType.queueAdd,
+          args:
+              const CommandArgs(mode: QueueAddMode.next, songIds: ['a', 'b']));
+      body = Map<String, dynamic>.from(adapter.last.data as Map);
+      expect((body['type'], body['mode']), ('queue_add', 'next'));
+      expect(body['songIds'], ['a', 'b']);
+
+      await api.sendCommand('dev-12345678', CommandType.queueRemove,
+          args: const CommandArgs(index: 0, songId: 'x'));
+      expect((adapter.last.data as Map)['type'], 'queue_remove');
+      await api.sendCommand('dev-12345678', CommandType.queuePlay,
+          args: const CommandArgs(index: 0, songId: 'x'));
+      expect((adapter.last.data as Map)['type'], 'queue_play');
+    });
+
+    test('keep targeting the device the sender saw', () async {
+      adapter.responder = (_) => json(202, {'delivered': true});
+      await api.sendCommand('dev-12345678', CommandType.volume,
+          targetDeviceId: 'playing-dev-01', args: const CommandArgs(volume: 1));
+      expect((adapter.last.data as Map)['targetDeviceId'], 'playing-dev-01');
+    });
+
+    test('the reported volume goes out with the state', () async {
+      adapter.responder = (_) => json(200, {'accepted': true});
+      await api.reportState(const StateReport(
+        deviceId: 'dev-12345678',
+        queueIds: null,
+        index: 0,
+        positionMs: 0,
+        playing: true,
+        repeat: LoopMode.off,
+        shuffle: false,
+        counted: false,
+        volume: 0.35,
+      ));
+      expect((adapter.last.data as Map)['volume'], 0.35);
+    });
+
+    test('fetchQueue carries the real positions of the songs', () async {
+      Map<String, dynamic> s(String id) => {
+            'id': id,
+            'title': id,
+            'artist': 'X',
+            'artistId': 'x',
+            'album': 'Y',
+            'albumId': 'y',
+            'suffix': 'mp3'
+          };
+      adapter.responder = (_) => json(200, {
+            'queueVersion': 3,
+            'index': 1,
+            'songs': [s('a'), s('c')],
+            'positions': [0, 2],
+          });
+      expect((await api.fetchQueue())?.positions, [0, 2]);
+
+      // A server that doesn't send them (or sends nonsense) means "as listed".
+      adapter.responder = (_) => json(200, {
+            'queueVersion': 3,
+            'index': 0,
+            'songs': [s('a'), s('c')],
+            'positions': [0],
+          });
+      expect((await api.fetchQueue())?.positions, [0, 1]);
+    });
   });
 
   group('renameDevice and fetchQueue', () {

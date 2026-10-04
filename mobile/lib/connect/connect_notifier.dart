@@ -19,6 +19,7 @@ import 'connect_api.dart';
 import 'connect_models.dart';
 import 'connect_prefs.dart';
 import 'remote_controller.dart';
+import 'remote_queue.dart';
 
 enum ConnectStatus { idle, connecting, online, offline, unavailable }
 
@@ -37,6 +38,9 @@ class ConnectState {
   /// What the active device last reported (also while it is this device).
   final PublicState? remote;
 
+  /// The other device's queue, kept fresh while something (the Queue screen) is watching it.
+  final RemoteQueueView? remoteQueue;
+
   const ConnectState({
     this.status = ConnectStatus.idle,
     this.polling = false,
@@ -45,6 +49,7 @@ class ConnectState {
     this.devices = const [],
     this.activeDeviceId,
     this.remote,
+    this.remoteQueue,
   });
 
   ConnectState copyWith({
@@ -55,6 +60,7 @@ class ConnectState {
     List<DeviceInfo>? devices,
     Object? activeDeviceId = _keep,
     Object? remote = _keep,
+    Object? remoteQueue = _keep,
   }) =>
       ConnectState(
         status: status ?? this.status,
@@ -66,6 +72,9 @@ class ConnectState {
             ? this.activeDeviceId
             : activeDeviceId as String?,
         remote: identical(remote, _keep) ? this.remote : remote as PublicState?,
+        remoteQueue: identical(remoteQueue, _keep)
+            ? this.remoteQueue
+            : remoteQueue as RemoteQueueView?,
       );
 
   /// Another device is the one playing.
@@ -95,6 +104,15 @@ class ConnectTimings {
   final Duration backgroundGrace;
   final double seekJumpSeconds;
 
+  /// While dragging the volume slider the other device hears it at most this often (plus the final value).
+  final Duration volumeSendEvery;
+
+  /// After the user moves the volume, state reports about the old value must not move the slider back.
+  final Duration volumeHold;
+
+  /// Songs added in quick succession travel as one command.
+  final Duration queueAddBatch;
+
   const ConnectTimings({
     this.helloTimeout = const Duration(seconds: 8),
     this.silenceTimeout = const Duration(seconds: 45),
@@ -106,6 +124,9 @@ class ConnectTimings {
     this.takeoverGrace = const Duration(seconds: 8),
     this.backgroundGrace = const Duration(minutes: 3),
     this.seekJumpSeconds = 1.5,
+    this.volumeSendEvery = const Duration(milliseconds: 150),
+    this.volumeHold = const Duration(milliseconds: 1500),
+    this.queueAddBatch = const Duration(milliseconds: 60),
   });
 }
 
@@ -164,6 +185,13 @@ class ConnectNotifier extends StateNotifier<ConnectState>
   Timer? _driftTimer;
   Timer? _mirrorTimer;
   Timer? _seekTimer;
+  Timer? _volumeTimer;
+  double? _pendingVolume;
+  DateTime _volumeHoldUntil = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _queueAddTimer;
+  List<Song> _pendingAdds = [];
+  int _queueWatchers = 0;
+  bool _fetchingQueue = false;
   Timer? _suspendTimer;
   StreamSubscription<PlayerState>? _playerSub;
   bool _suspended = false;
@@ -247,12 +275,15 @@ class ConnectNotifier extends StateNotifier<ConnectState>
   }
 
   /// Resolves to whether the command was delivered.
-  Future<bool> _sendRemoteCommand(CommandType type, int? positionMs) async {
+  Future<bool> _sendRemoteCommand(CommandType type, int? positionMs,
+      {CommandArgs? args}) async {
     final api = _api;
     if (api == null) return false;
     // Aimed at the device we believe is playing; the server refuses it if another one has taken over.
     final result = await api.sendCommand(state.deviceId, type,
-        positionMs: positionMs, targetDeviceId: state.activeDeviceId);
+        positionMs: positionMs,
+        targetDeviceId: state.activeDeviceId,
+        args: args);
     if (result == CommandResult.sent) return true;
     final active = state.activeDevice;
     _showMessage(
@@ -261,9 +292,175 @@ class ConnectNotifier extends StateNotifier<ConnectState>
           : result == CommandResult.noActiveDevice ||
                   result == CommandResult.unknownDevice
               ? "${active?.name ?? 'That device'} isn't reachable right now"
-              : "Couldn't reach the server",
+              : result == CommandResult.rateLimited
+                  ? 'Slow down a little'
+                  : "Couldn't reach the server",
     );
     return false;
+  }
+
+  // ── Volume and queue of the other device (phase 2) ───────────────────────────
+
+  @override
+  double get volume => state.remote?.volume ?? 1.0;
+
+  // The slider follows the finger at once; the other device hears it at a steady pace, then the final value.
+  @override
+  void setVolume(double volume) {
+    final v = volume.clamp(0.0, 1.0);
+    final before = state.remote;
+    if (before != null) {
+      state = state.copyWith(remote: before.copyWith(volume: v));
+    }
+    _volumeHoldUntil = _now().add(_t.volumeHold);
+    _pendingVolume = v;
+    if (_volumeTimer == null) _sendVolume();
+  }
+
+  void _sendVolume() {
+    _volumeTimer = null;
+    final v = _pendingVolume;
+    if (v == null) return;
+    _pendingVolume = null;
+    _sendRemoteCommand(CommandType.volume, null, args: CommandArgs(volume: v));
+    // Keep the cooldown running so a drag doesn't flood the server; a value that arrives meanwhile goes out at its end.
+    _volumeTimer = Timer(_t.volumeSendEvery, _sendVolume);
+  }
+
+  ({int real, String songId})? _queueTarget(int index) {
+    final view = state.remoteQueue;
+    if (view == null || index < 0 || index >= view.songs.length) return null;
+    return (real: view.positions[index], songId: view.songs[index].id);
+  }
+
+  @override
+  void queueRemove(int index) {
+    final t = _queueTarget(index);
+    final view = state.remoteQueue;
+    if (t == null || view == null) return;
+    state = state.copyWith(remoteQueue: view.removed(index));
+    _sendRemoteCommand(CommandType.queueRemove, null,
+        args: CommandArgs(index: t.real, songId: t.songId));
+  }
+
+  @override
+  void queueMove(int from, int to) {
+    final t = _queueTarget(from);
+    final dest = _queueTarget(to);
+    final view = state.remoteQueue;
+    if (t == null || dest == null || view == null) return;
+    state = state.copyWith(remoteQueue: view.moved(from, to));
+    _sendRemoteCommand(CommandType.queueMove, null,
+        args: CommandArgs(index: t.real, to: dest.real, songId: t.songId));
+  }
+
+  /// Jump to the song at this index of [ConnectState.remoteQueue] on the playing device.
+  void playRemoteQueueItem(int index) {
+    final t = _queueTarget(index);
+    if (t == null) return;
+    _sendRemoteCommand(CommandType.queuePlay, null,
+        args: CommandArgs(index: t.real, songId: t.songId));
+  }
+
+  // "Add to queue" on this phone means "play next, in the order added", so that is what is sent.
+  @override
+  void queueAdd(Song song) {
+    _pendingAdds.add(song);
+    _queueAddTimer ??= Timer(_t.queueAddBatch, _flushQueueAdds);
+  }
+
+  static const _queueAddChunk = 100;
+
+  Future<void> _flushQueueAdds() async {
+    _queueAddTimer = null;
+    final songs = _pendingAdds;
+    _pendingAdds = [];
+    if (songs.isEmpty) return;
+    final name = state.activeDevice?.name ?? 'the other device';
+    var delivered = true;
+    for (var i = 0; i < songs.length; i += _queueAddChunk) {
+      final chunk = songs.skip(i).take(_queueAddChunk).toList();
+      final ok = await _sendRemoteCommand(CommandType.queueAdd, null,
+          args: CommandArgs(
+              mode: QueueAddMode.next,
+              songIds: chunk.map((s) => s.id).toList()));
+      delivered = ok && delivered;
+    }
+    if (delivered) {
+      _showMessage(songs.length == 1
+          ? '1 song will play next on $name'
+          : '${songs.length} songs will play next on $name');
+    }
+  }
+
+  /// Start keeping [ConnectState.remoteQueue] current; returns the function that stops watching.
+  void Function() watchRemoteQueue() {
+    _queueWatchers++;
+    _refreshRemoteQueue();
+    var stopped = false;
+    return () {
+      if (stopped) return;
+      stopped = true;
+      _queueWatchers = max(0, _queueWatchers - 1);
+    };
+  }
+
+  /// Keeps the shown queue in step with the playing device, but only while someone watches it (it costs a fetch).
+  Future<void> _refreshRemoteQueue({bool retry = true}) async {
+    final r = state.remote;
+    final api = _api;
+    if (api == null ||
+        _queueWatchers == 0 ||
+        !isRemote ||
+        r == null ||
+        _fetchingQueue) {
+      return;
+    }
+    if (state.remoteQueue?.version == r.queueVersion) return;
+    _fetchingQueue = true;
+    var fetched = false;
+    try {
+      final q = await api.fetchQueue();
+      if (q != null && isRemote && mounted) {
+        fetched = true;
+        final current = state.remote;
+        final view = RemoteQueueView(
+            version: q.queueVersion,
+            songs: q.songs,
+            positions: q.positions,
+            index: q.index);
+        final index = current != null ? view.viewIndexOf(current.index) : -1;
+        state = state.copyWith(
+            remoteQueue: index >= 0 ? view.copyWith(index: index) : view);
+      }
+    } catch (_) {
+      // keep showing what we have; the next state event tries again
+    } finally {
+      _fetchingQueue = false;
+    }
+    // The queue may have changed again while the request was in flight: look once more, but only once and only
+    // after a fetch that worked — never a request loop (a failing server, or a view that is already ahead).
+    final now = state.remote;
+    final have = state.remoteQueue?.version;
+    if (retry &&
+        fetched &&
+        mounted &&
+        now != null &&
+        have != null &&
+        have < now.queueVersion) {
+      _refreshRemoteQueue(retry: false);
+    }
+  }
+
+  /// The current song's place in the shown queue follows the device's state without a refetch.
+  void _followRemoteIndex() {
+    final view = state.remoteQueue;
+    final r = state.remote;
+    if (view == null || r == null || view.version != r.queueVersion) return;
+    final index = view.viewIndexOf(r.index);
+    if (index != view.index) {
+      state = state.copyWith(remoteQueue: view.copyWith(index: index));
+    }
   }
 
   // ── Mirror: show the remote device's playback through the normal player state ──
@@ -306,6 +503,7 @@ class ConnectNotifier extends StateNotifier<ConnectState>
       // This device is the player now (or nobody is): any takeover is settled.
       _takeoverUntil = DateTime.fromMillisecondsSinceEpoch(0);
       _stopMirror();
+      if (state.remoteQueue != null) state = state.copyWith(remoteQueue: null);
     }
   }
 
@@ -342,6 +540,7 @@ class ConnectNotifier extends StateNotifier<ConnectState>
       repeat: p.repeatMode,
       shuffle: p.shuffle,
       counted: _player.currentPlayCounted,
+      volume: _player.volume,
     ));
 
     switch (result) {
@@ -499,10 +698,59 @@ class ConnectNotifier extends StateNotifier<ConnectState>
           _player.previous();
         case CommandType.seek:
           _player.seek(Duration(milliseconds: c.positionMs ?? 0));
+        case CommandType.volume:
+          final v = c.volume;
+          if (v != null && v.isFinite) {
+            _player.setVolume(v);
+            _scheduleReport(); // so the other devices show the new volume
+          }
+        // The queue edits name the song they were aimed at: if the queue changed since the sender looked, the
+        // index points at something else now and the edit is dropped rather than applied to the wrong song.
+        case CommandType.queuePlay:
+          final i = c.index;
+          if (i != null && _songAt(i)?.id == c.songId) {
+            _player.playFromQueueIndex(i);
+          }
+        case CommandType.queueRemove:
+          final i = c.index;
+          // Removing the song that is playing would stop the music; the other device's UI doesn't offer it.
+          if (i != null &&
+              i != _player.state.currentIndex &&
+              _songAt(i)?.id == c.songId) {
+            _player.removeFromQueue(i);
+          }
+        case CommandType.queueMove:
+          final i = c.index;
+          final to = c.to;
+          if (i != null &&
+              to != null &&
+              to >= 0 &&
+              to < _player.state.queue.length &&
+              _songAt(i)?.id == c.songId) {
+            _player.reorderQueue(i, to);
+          }
+        case CommandType.queueAdd:
+          final client = _client;
+          if (client == null) break;
+          for (final song in c.songs) {
+            switch (c.mode) {
+              case QueueAddMode.next:
+                _player.addToQueue(song, client, _downloads);
+              case QueueAddMode.end:
+                _player.addToQueueEnd(song, client, _downloads);
+              case null:
+                break;
+            }
+          }
       }
     } finally {
       _executingLocal = false;
     }
+  }
+
+  Song? _songAt(int index) {
+    final queue = _player.state.queue;
+    return index >= 0 && index < queue.length ? queue[index] : null;
   }
 
   static const _loadRetryFirst = Duration(milliseconds: 500);
@@ -563,6 +811,7 @@ class ConnectNotifier extends StateNotifier<ConnectState>
             activeDeviceId: s.activeDeviceId,
             remote: s.state);
         _syncMirror();
+        _refreshRemoteQueue();
         // (Re)connected: let the server know our queue again (it may have restarted).
         _forceQueue = true;
         if (_shouldReport()) _scheduleReport(Duration.zero);
@@ -575,10 +824,18 @@ class ConnectNotifier extends StateNotifier<ConnectState>
             devices: devicesFromJson(m['devices']),
             activeDeviceId: m['activeDeviceId'] as String?);
         _syncMirror();
+        _refreshRemoteQueue();
       case 'state':
-        final s = PublicState.fromJson(Map<String, dynamic>.from(data! as Map));
+        var s = PublicState.fromJson(Map<String, dynamic>.from(data! as Map));
+        // The user just moved the volume: a report generated before the device heard about it must not drag the slider back.
+        final held = state.remote?.volume;
+        if (_now().isBefore(_volumeHoldUntil) && held != null) {
+          s = s.copyWith(volume: held);
+        }
         state = state.copyWith(remote: s, activeDeviceId: s.activeDeviceId);
         _syncMirror();
+        _followRemoteIndex();
+        _refreshRemoteQueue();
       case 'command':
         final c = CommandInstruction.tryParse(
             Map<String, dynamic>.from(data! as Map));
@@ -773,8 +1030,14 @@ class ConnectNotifier extends StateNotifier<ConnectState>
     _reportTimer?.cancel();
     _driftTimer?.cancel();
     _seekTimer?.cancel();
+    _volumeTimer?.cancel();
+    _queueAddTimer?.cancel();
     _suspendTimer?.cancel();
     _reportTimer = _driftTimer = _seekTimer = _suspendTimer = null;
+    _volumeTimer = _queueAddTimer = null;
+    _pendingVolume = null;
+    _pendingAdds = [];
+    _volumeHoldUntil = DateTime.fromMillisecondsSinceEpoch(0);
     _takeoverUntil = DateTime.fromMillisecondsSinceEpoch(0);
     _stopMirror();
     _mirrorQueue = null;
@@ -788,7 +1051,8 @@ class ConnectNotifier extends StateNotifier<ConnectState>
           status: ConnectStatus.idle,
           devices: const [],
           activeDeviceId: null,
-          remote: null);
+          remote: null,
+          remoteQueue: null);
     }
   }
 

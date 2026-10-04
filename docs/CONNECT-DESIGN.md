@@ -1,6 +1,6 @@
 # RiffPlayer Connect — Phase 1 design
 
-> **Approved by the owner 2026-10-03.** Status: **Phase 1 implemented** — server (`server/src/connect/`,
+> **Approved by the owner 2026-10-03.** Status: **Phase 1 implemented (v0.2.0); Phase 2 implemented (§16)** — server (`server/src/connect/`,
 > `server/src/routes/api/connect.ts`), web (`web/src/store/connect.ts`), Android (`mobile/lib/connect/`), security
 > review done (§15). Scope decisions are in §1 and §14.
 
@@ -27,7 +27,7 @@ from one to another. Audio is only ever played by one device; the others are rem
 **In (Phase 1):** device list · transfer playback · remote play/pause/next/previous/seek · live
 "now playing" mirrored on every device · controller doesn't play audio · resume last session.
 
-**Phase 2 (designed to fit, not built):** remote volume · remote queue view/edit.
+**Phase 2 (built, §16):** remote volume · remote queue view/edit.
 
 **Out, deliberately:** Jam / shared sessions between users, smart-speaker / Bluetooth hardware
 protocols, synchronized multi-device playback, push wake-up of a closed app.
@@ -289,3 +289,57 @@ Known and accepted: a user's own devices are trusted with each other (any of the
 queue); song JSON in the state includes the server file path (same as other endpoints); a browser tab that plays music
 must stay open (frozen background tabs look unreachable until the desktop app exists).
 
+
+## 16. Phase 2 — remote volume and remote queue (2026-10-04)
+
+Scope decisions (owner, 2026-10-04): Android volume is the **app's own player volume** (no new dependency, the phone's
+hardware volume keys stay separate); queue support is **view + basic editing** (show, jump to a song, remove, reorder,
+add as "next" / at the end, from another device too); released together as **v0.3.0**. No schema change; everything is
+under `/api/v1/connect`, old clients ignore the new commands.
+
+### Protocol additions
+
+| Where | Addition |
+|---|---|
+| `POST /state` | `volume` (0..1, default 1) — the playing device's own player volume. Part of the public `state`. |
+| `POST /command` types | `volume {volume}`, `queue_play {index, songId}`, `queue_remove {index, songId}`, `queue_move {index, to, songId}`, `queue_add {mode: next\|end, songIds[≤100]}` |
+| `command` event | the same fields; a `queue_add` carries the **resolved `songs`** (not ids), unknown ids already dropped (all unknown → `400`) |
+| `GET /queue` | also returns `positions[]`: the real queue position of each returned song |
+
+* **The queue commands name the song they were aimed at (`songId`).** The playing device ignores a command whose
+  `queue[index]` isn't that song, so an edit made against a stale view can never hit the wrong track.
+* **Queue edits address real positions.** The library may have dropped ids from the queue (a deleted track), so the
+  controller's list can be shorter than the real queue; `positions` maps one to the other.
+* The playing device applies an edit and reports its new queue as usual → `queueVersion` bumps → controllers refetch.
+* **Removing the song that is playing is refused** (it would stop the music); the UIs don't offer it.
+* Each device keeps its own queue semantics: on the web a block "next" is inserted directly after the current song; on
+  Android "Add to queue" means "after the current song and after what was queued before" and `queue_play` also drops
+  what came before (the phone's own Up Next model).
+
+### Controller side (web and Android alike)
+
+* **Volume.** While another device plays, the volume slider (and the web's keyboard shortcuts and mute) shows and drives
+  *that* device's volume; this device's own is untouched. The slider moves at once, the device hears it at most every
+  150 ms plus the final value, and for 1.5 s after the user's last move state reports about the old value are ignored
+  so the slider never jumps back. Android: a slider in the device picker.
+* **Queue view.** `remoteQueue` is fetched only while a screen watches it (the Queue page), refetched when the device's
+  `queueVersion` changes, and the highlighted song follows the device's `index` without a fetch. Edits are shown at
+  once (optimistic) and then replaced by the device's report. A failing server is asked once per state event, never in a
+  loop.
+* **Adding.** "Play next" / "Add to queue" on a controller go to the playing device instead of the controller's own
+  (empty) queue; songs added in quick succession (an album) travel as one command, in listening order; confirmation is
+  a toast/snackbar only when the command was delivered.
+
+### Player side
+
+* `volume` is the user's volume times the track's ReplayGain (Android's handler used to overwrite any volume with the
+  gain alone). Session-only on Android: a restart is back at full volume rather than silently quiet.
+* Commands are validated before they touch the queue (type, bounds, `songId` match) and malformed fields are treated as
+  absent — a bad command must never throw into the event stream.
+
+### Tests
+
+Server: parsing, relay, resolved songs, `positions`, `no_valid_songs`, route-level; web: store (volume throttle/hold,
+queue fetch/follow/edit, batching, execution guards), `remoteQueue` helpers, `PlayerBar`, `QueuePage`; Android: models,
+API, notifier (same cases as web), `RemoteQueueView`, queue screen, device picker, player notifier. Key behaviours
+mutation-checked.

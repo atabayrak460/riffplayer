@@ -73,7 +73,8 @@ class DevicePickerSheet extends ConsumerWidget {
     final others = list.where((d) => d.id != s.deviceId);
 
     return SafeArea(
-      child: Padding(
+      // Scrolls rather than overflows: many devices plus the volume slider can outgrow a short screen.
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -101,6 +102,9 @@ class DevicePickerSheet extends ConsumerWidget {
                 ),
               ),
             for (final d in list) _DeviceTile(device: d, state: s),
+            // Another device is playing: its volume is controlled from here (this phone's own is its volume keys).
+            if (s.remoteActive && (s.activeDevice?.online ?? false))
+              _RemoteVolume(state: s),
             if (s.status == ConnectStatus.online && others.isEmpty)
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -111,6 +115,33 @@ class DevicePickerSheet extends ConsumerWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Volume slider for the device that is playing (while it isn't this one).
+class _RemoteVolume extends ConsumerWidget {
+  final ConnectState state;
+  const _RemoteVolume({required this.state});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final volume = state.remote?.volume ?? 1.0;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Row(
+        children: [
+          Icon(volume == 0 ? Icons.volume_off : Icons.volume_up,
+              color: _muted, size: 20),
+          Expanded(
+            child: Slider(
+              key: const Key('remote-volume'),
+              value: volume.clamp(0.0, 1.0),
+              onChanged: (v) => ref.read(connectProvider.notifier).setVolume(v),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -323,4 +323,131 @@ void main() {
           0);
     });
   });
+
+  group('phase 2 models', () {
+    Map<String, dynamic> songJson() => {
+          'id': 's1',
+          'title': 'T',
+          'artist': 'A',
+          'artistId': 'ar1',
+          'album': 'B',
+          'albumId': 'al1',
+          'suffix': 'mp3',
+        };
+
+    test('CommandType maps to and from the snake_case wire names', () {
+      expect(CommandType.queuePlay.wire, 'queue_play');
+      expect(CommandType.queueRemove.wire, 'queue_remove');
+      expect(CommandType.queueMove.wire, 'queue_move');
+      expect(CommandType.queueAdd.wire, 'queue_add');
+      expect(CommandType.volume.wire, 'volume');
+      expect(CommandType.next.wire, 'next');
+      for (final t in CommandType.values) {
+        expect(CommandType.fromWire(t.wire), t);
+      }
+      expect(CommandType.fromWire('queuePlay'),
+          isNull); // the Dart name is not the wire name
+      expect(CommandType.fromWire('self-destruct'), isNull);
+      expect(CommandType.fromWire(null), isNull);
+    });
+
+    test('CommandInstruction.tryParse reads volume and queue arguments', () {
+      final v = CommandInstruction.tryParse({
+        'commandId': 'c1',
+        'type': 'volume',
+        'volume': 0.25,
+        'expiresAtMs': 9
+      })!;
+      expect((v.type, v.volume), (CommandType.volume, 0.25));
+
+      final m = CommandInstruction.tryParse({
+        'commandId': 'c2',
+        'type': 'queue_move',
+        'index': 3,
+        'to': 1,
+        'songId': 's3',
+        'expiresAtMs': 9
+      })!;
+      expect((m.type, m.index, m.to, m.songId),
+          (CommandType.queueMove, 3, 1, 's3'));
+
+      final a = CommandInstruction.tryParse({
+        'commandId': 'c3',
+        'type': 'queue_add',
+        'mode': 'end',
+        'expiresAtMs': 9,
+        'songs': [songJson(), songJson()],
+      })!;
+      expect((a.type, a.mode, a.songs.length),
+          (CommandType.queueAdd, QueueAddMode.end, 2));
+    });
+
+    test('CommandInstruction.tryParse never throws on malformed arguments', () {
+      final c = CommandInstruction.tryParse({
+        'commandId': 'c1',
+        'type': 'queue_add',
+        'expiresAtMs': 9,
+        'volume': 'loud',
+        'index': 'zero',
+        'to': [],
+        'songId': 7,
+        'mode': 'sideways',
+        'songs': [
+          null,
+          'x',
+          {'title': 'no id'},
+          {'id': 'bad'},
+          songJson()
+        ],
+      })!;
+      expect((c.volume, c.index, c.to, c.songId, c.mode),
+          (null, null, null, null, null));
+      expect(c.songs.length, 1); // only the one that really is a song
+    });
+
+    test(
+        'PublicState reads the volume (full volume from an older server) and copies it',
+        () {
+      Map<String, dynamic> j([Object? v = 'omit']) => {
+            'activeDeviceId': 'd',
+            'playing': true,
+            'index': 0,
+            'queueLength': 1,
+            'queueVersion': 1,
+            'positionMs': 0,
+            'positionAtMs': 0,
+            'repeat': 'off',
+            'shuffle': false,
+            'counted': false,
+            if (v != 'omit') 'volume': v,
+          };
+      expect(PublicState.fromJson(j()).volume, 1.0);
+      expect(PublicState.fromJson(j(0.4)).volume, 0.4);
+      expect(PublicState.fromJson(j(7)).volume, 1.0);
+      expect(PublicState.fromJson(j(-1)).volume, 0.0);
+      expect(PublicState.fromJson(j(0.4)).copyWith(volume: 0.9).volume, 0.9);
+      expect(PublicState.fromJson(j(0.4)).copyWith(playing: false).volume, 0.4);
+    });
+
+    test('CommandArgs only serialises what is set', () {
+      expect(const CommandArgs().toJson(), isEmpty);
+      expect(
+          const CommandArgs(
+                  volume: 0.5,
+                  index: 1,
+                  to: 2,
+                  songId: 's',
+                  songIds: ['a'],
+                  mode: QueueAddMode.end)
+              .toJson(),
+          {
+            'volume': 0.5,
+            'index': 1,
+            'to': 2,
+            'songId': 's',
+            'songIds': ['a'],
+            'mode': 'end'
+          });
+    });
+  });
 }

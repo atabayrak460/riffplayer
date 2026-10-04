@@ -270,6 +270,8 @@ Your devices can see each other and work together, like Spotify Connect: start a
 - Open RiffPlayer on two devices signed in as the same user (web in a browser tab, and/or the Android app).
 - Tap the **speaker button** in the player. You see your devices; tap one to move playback there. "Play here" on this device brings it back.
 - While another device plays, the player bar shows **Playing on <device>**; play/pause, next/previous and the seek bar control that device.
+- The **volume slider** then sets *that* device's volume (on the phone: the slider in the device list). It is the app's own volume, separate from the phone's hardware volume keys.
+- The **Queue** page shows and edits the queue of the device that is playing: tap a song to jump to it, remove or drag songs, and "Play next" / "Add to queue" on any song add it to *that* device's queue.
 - Starting a song on a device takes over from whichever device was playing.
 - If the playing device disappears (laptop asleep, tab closed) you get **"<device> is unreachable · Continue here"**: the queue and position move to the device you are holding.
 - Rename a device under **Settings → This device** (default: e.g. "Web · Firefox on Linux", or the phone model).
@@ -279,7 +281,7 @@ Your devices can see each other and work together, like Spotify Connect: start a
 - It works between RiffPlayer's own clients only (web and Android); third-party Subsonic apps can't take part.
 - You only ever see and control **your own** devices.
 - A browser tab that plays music has to stay open; a phone has to have the app open or playing. Paused, backgrounded apps disconnect after about three minutes to save battery. There are no push notifications and no third-party services involved.
-- Volume of another device and editing its queue remotely are not part of this first version.
+- A device that is playing can't have its current song removed from another device's queue view (that would stop the music); everything else in the queue can be changed.
 - Older servers without Connect simply don't show the speaker button; nothing else changes. Subsonic compatibility is untouched (everything lives under `/api/v1/connect`).
 
 **Privacy and security**

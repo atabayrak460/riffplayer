@@ -1,3 +1,4 @@
+import '../api/types.dart';
 import 'connect_models.dart';
 
 /// Hook that lets RiffPlayer Connect turn the player's transport actions into remote commands while
@@ -11,4 +12,14 @@ abstract class RemoteController {
 
   /// The user started something on this device (a takeover is on its way).
   void onLocalStart();
+
+  /// Phase 2: the other device's volume and queue. Queue indexes are positions in the queue as this device
+  /// shows it (see the connect notifier's `remoteQueue`).
+  void setVolume(double volume);
+
+  /// The other device's volume (1.0 if it hasn't said).
+  double get volume;
+  void queueAdd(Song song);
+  void queueRemove(int index);
+  void queueMove(int from, int to);
 }

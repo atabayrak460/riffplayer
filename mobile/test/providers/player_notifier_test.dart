@@ -26,6 +26,21 @@ class _FakeRemote implements RemoteController {
   bool isRemote = true;
   final commands = <(CommandType, int?)>[];
   int localStarts = 0;
+  final volumes = <double>[];
+  final adds = <Song>[];
+  final removes = <int>[];
+  final moves = <(int, int)>[];
+
+  @override
+  double get volume => 0.5;
+  @override
+  void setVolume(double volume) => volumes.add(volume);
+  @override
+  void queueAdd(Song song) => adds.add(song);
+  @override
+  void queueRemove(int index) => removes.add(index);
+  @override
+  void queueMove(int from, int to) => moves.add((from, to));
 
   @override
   void command(CommandType type, {int? positionMs}) =>
@@ -743,6 +758,91 @@ void main() {
 
         verify(() => handler.pause()).called(1);
         expect(remote.commands, isEmpty);
+      });
+    });
+
+    group('while another device is playing, the queue actions edit its queue',
+        () {
+      test(
+          '"Add to queue" goes to the other device, not this phone\'s own queue',
+          () async {
+        final a = _song('a');
+        await notifier.addToQueue(a, client, downloads);
+
+        expect(remote.adds, [a]);
+        expect(notifier.state.queue, isEmpty);
+        verifyNever(() => handler.insertAt(any(), any()));
+      });
+
+      test('removing and reordering are forwarded with the indexes as shown',
+          () async {
+        await notifier.removeFromQueue(3);
+        await notifier.reorderQueue(2, 5);
+
+        expect(remote.removes, [3]);
+        expect(remote.moves, [(2, 5)]);
+        verifyNever(() => handler.removeQueueItemAt(any()));
+        verifyNever(() => handler.moveQueueItem(any(), any()));
+      });
+
+      test('they act locally as usual when this device is the player',
+          () async {
+        remote.isRemote = false;
+        await notifier.addToQueue(_song('a'), client, downloads);
+
+        expect(remote.adds, isEmpty);
+        verify(() => handler.insertAt(0, any())).called(1);
+      });
+    });
+
+    group('addToQueueEnd', () {
+      test('puts the song at the very end, after anything queued as "next"',
+          () async {
+        remote.isRemote = false;
+        await notifier.playSong(_song('current'), client, downloads,
+            queue: [_song('current'), _song('x'), _song('y')], queueIndex: 0);
+        await notifier.addToQueue(
+            _song('n'), client, downloads); // goes right after current
+
+        await notifier.addToQueueEnd(_song('end'), client, downloads);
+
+        expect(notifier.state.queue.map((s) => s.id),
+            ['current', 'n', 'x', 'y', 'end']);
+        verify(() => handler.insertAt(4, any())).called(1);
+      });
+
+      test('starts playback from scratch when nothing is queued', () async {
+        remote.isRemote = false;
+        await notifier.addToQueueEnd(_song('a'), client, downloads);
+        expect(notifier.state.queue.map((s) => s.id), ['a']);
+        verify(() => handler.insertAt(0, any())).called(1);
+      });
+    });
+
+    group('volume', () {
+      test(
+          'starts at full volume and passes what is set to the audio handler, clamped',
+          () async {
+        when(() => handler.setUserVolume(any())).thenAnswer((_) async {});
+        expect(notifier.volume, 1.0);
+
+        await notifier.setVolume(0.4);
+        expect(notifier.volume, 0.4);
+        verify(() => handler.setUserVolume(0.4)).called(1);
+
+        await notifier.setVolume(5);
+        expect(notifier.volume, 1.0);
+        await notifier.setVolume(-1);
+        expect(notifier.volume, 0.0);
+      });
+
+      test('is this phone\'s own volume even while another device plays',
+          () async {
+        when(() => handler.setUserVolume(any())).thenAnswer((_) async {});
+        await notifier.setVolume(0.7);
+        expect(remote.volumes,
+            isEmpty); // forwarding is the connect notifier\'s job, not setVolume\'s
+        verify(() => handler.setUserVolume(0.7)).called(1);
       });
     });
 

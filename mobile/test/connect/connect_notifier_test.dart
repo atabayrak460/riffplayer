@@ -85,6 +85,9 @@ class FakePrefs implements ConnectPrefs {
 class FakeConnectApi implements ConnectApi {
   final reports = <StateReport>[];
   final commands = <(CommandType, int?, String?)>[];
+
+  /// The extra arguments of each command in [commands] (phase 2), same order.
+  final commandArgs = <CommandArgs?>[];
   final transfers = <(String, String)>[];
   final renames = <(String, String)>[];
   final identities = <DeviceIdentity>[];
@@ -151,8 +154,9 @@ class FakeConnectApi implements ConnectApi {
 
   @override
   Future<CommandResult> sendCommand(String deviceId, CommandType type,
-      {int? positionMs, String? targetDeviceId}) async {
+      {int? positionMs, String? targetDeviceId, CommandArgs? args}) async {
     commands.add((type, positionMs, targetDeviceId));
+    commandArgs.add(args);
     return commandResult;
   }
 
@@ -213,6 +217,7 @@ class Harness {
     when(() => handler.skipToPrevious()).thenAnswer((_) async {});
     when(() => handler.setLoopMode(any())).thenAnswer((_) async {});
     when(() => handler.setShuffleModeEnabled(any())).thenAnswer((_) async {});
+    when(() => handler.setUserVolume(any())).thenAnswer((_) async {});
     when(() => handler.playQueue(any(), any(),
         position: any(named: 'position'),
         autoplay: any(named: 'autoplay'))).thenAnswer((_) async {});
@@ -1903,6 +1908,520 @@ void main() {
             current: any(named: 'current'),
             positionMs: any(named: 'positionMs')));
       });
+    });
+  });
+
+  // ── Phase 2: the other device's volume and queue ───────────────────────────
+
+  group('remote volume', () {
+    Map<String, dynamic> withVolume(Harness h, double v) =>
+        {...h.remoteJson(), 'volume': v};
+
+    fakeTest(
+        'the slider drives the other device\'s volume and shows it at once, leaving this phone\'s own alone',
+        (h) {
+      h.startOnline();
+      h.otherIsPlaying(remote: withVolume(h, 0.6));
+      expect(h.connect.volume, 0.6);
+
+      h.player.setVolume(0.9); // this phone's own player volume (not forwarded)
+      h.connect.setVolume(0.3);
+      h.tick();
+
+      expect(h.api.commands.last, (CommandType.volume, null, other));
+      expect(h.api.commandArgs.last?.volume, 0.3);
+      expect(h.state.remote?.volume, 0.3);
+      expect(h.player.volume, 0.9);
+    });
+
+    fakeTest(
+        'a drag goes out at a steady pace and always ends with the final value',
+        (h) {
+      h.startOnline();
+      h.otherIsPlaying(remote: withVolume(h, 0.6));
+
+      for (final v in [0.1, 0.2, 0.3, 0.4]) {
+        h.connect.setVolume(v);
+      }
+      h.tick();
+      expect(h.api.commands.length, 1); // the first value goes out at once
+      expect(h.api.commandArgs.last?.volume, 0.1);
+
+      h.tick(const Duration(milliseconds: 150));
+      expect(h.api.commands.length, 2);
+      expect(h.api.commandArgs.last?.volume, 0.4); // not 0.2 / 0.3
+
+      h.tick(const Duration(seconds: 1));
+      expect(h.api.commands.length, 2); // nothing is sent twice
+    });
+
+    fakeTest('clamps to 0..1', (h) {
+      h.startOnline();
+      h.otherIsPlaying(remote: withVolume(h, 0.6));
+      h.connect.setVolume(7);
+      h.tick();
+      expect(h.api.commandArgs.last?.volume, 1.0);
+    });
+
+    fakeTest(
+        'a state report about the old value does not drag the slider back, a later one does',
+        (h) {
+      h.startOnline();
+      h.otherIsPlaying(remote: withVolume(h, 0.6));
+      h.connect.setVolume(0.2);
+      h.tick();
+
+      h.handle('state',
+          withVolume(h, 0.6)); // generated before the device heard about it
+      expect(h.state.remote?.volume, 0.2);
+
+      h.tick(const Duration(seconds: 2));
+      h.handle('state', withVolume(h, 0.5));
+      expect(h.state.remote?.volume, 0.5);
+    });
+
+    fakeTest('full volume from a server that does not report one', (h) {
+      h.startOnline();
+      h.otherIsPlaying();
+      expect(h.connect.volume, 1.0);
+    });
+
+    fakeTest(
+        'is applied to this phone\'s player when another device asks, and reported back',
+        (h) {
+      h.startOnline();
+      h.playLocally();
+      h.meIsActive();
+      h.tick(const Duration(seconds: 1));
+      h.api.reports.clear();
+
+      h.handle('command', {
+        'commandId': 'v1',
+        'type': 'volume',
+        'volume': 0.35,
+        'expiresAtMs': h.nowMs + 5000,
+      });
+      h.tick(const Duration(milliseconds: 300));
+
+      verify(() => h.handler.setUserVolume(0.35)).called(1);
+      expect(h.player.volume, 0.35);
+      expect(h.api.reports.last.volume, 0.35);
+    });
+
+    fakeTest('ignores a volume command without a usable value', (h) {
+      h.startOnline();
+      h.handle('command', {
+        'commandId': 'v1',
+        'type': 'volume',
+        'expiresAtMs': h.nowMs + 5000,
+      });
+      h.handle('command', {
+        'commandId': 'v2',
+        'type': 'volume',
+        'volume': 'loud',
+        'expiresAtMs': h.nowMs + 5000,
+      });
+      verifyNever(() => h.handler.setUserVolume(any()));
+    });
+  });
+
+  group('the other device\'s queue', () {
+    QueueResult queueOf(List<String> ids,
+            {int version = 1, int index = 0, List<int>? positions}) =>
+        QueueResult(
+            queueVersion: version,
+            index: index,
+            songs: ids.map((id) => song(id)).toList(),
+            positions: positions);
+
+    Map<String, dynamic> remote(Harness h, {int version = 1, int index = 1}) =>
+        {...h.remoteJson(), 'queueVersion': version, 'index': index};
+
+    void setUpQueue(Harness h,
+        {List<String> ids = const ['a', 'b', 'c', 'd'], List<int>? positions}) {
+      h.startOnline();
+      h.api.queue = queueOf(ids, positions: positions);
+      h.otherIsPlaying(remote: remote(h));
+    }
+
+    fakeTest(
+        'is fetched only while someone watches, and the current song follows the device\'s index',
+        (h) {
+      setUpQueue(h);
+      expect(h.api.queueCalls, 0);
+      expect(h.state.remoteQueue, isNull);
+
+      final stop = h.connect.watchRemoteQueue();
+      h.tick();
+      expect(h.api.queueCalls, 1);
+      expect(h.state.remoteQueue?.songs.map((s) => s.id), ['a', 'b', 'c', 'd']);
+      expect(h.state.remoteQueue?.index,
+          1); // from the state, not the fetch (which said 0)
+
+      h.handle('state', remote(h, index: 3));
+      expect(h.state.remoteQueue?.index, 3);
+      expect(h.api.queueCalls, 1); // a new current song needs no refetch
+      stop();
+    });
+
+    fakeTest(
+        'is fetched again when the queue itself changes, but not when a report repeats the same version',
+        (h) {
+      setUpQueue(h);
+      final stop = h.connect.watchRemoteQueue();
+      h.tick();
+      h.api.queue = queueOf(['a', 'b', 'x', 'c', 'd'], version: 2);
+
+      h.handle('state', remote(h));
+      h.tick();
+      expect(h.api.queueCalls, 1);
+
+      h.handle('state', remote(h, version: 2));
+      h.tick();
+      expect(h.api.queueCalls, 2);
+      expect(h.state.remoteQueue?.songs.length, 5);
+      stop();
+    });
+
+    fakeTest(
+        'stops fetching when the last watcher leaves, and drops the view when this phone plays again',
+        (h) {
+      setUpQueue(h);
+      final stop = h.connect.watchRemoteQueue();
+      h.tick();
+      stop();
+      stop(); // stopping twice must not unbalance the count
+      h.handle('state', remote(h, version: 2));
+      h.tick();
+      expect(h.api.queueCalls, 1);
+
+      final again = h.connect.watchRemoteQueue();
+      h.tick();
+      expect(h.state.remoteQueue, isNotNull);
+      h.meIsActive();
+      expect(h.state.remoteQueue, isNull);
+      again();
+    });
+
+    fakeTest('a failing server is asked once per state event, never in a loop',
+        (h) {
+      setUpQueue(h);
+      h.api.queue = null;
+      final stop = h.connect.watchRemoteQueue();
+      h.tick(const Duration(seconds: 5));
+      expect(h.api.queueCalls, 1);
+      expect(h.state.remoteQueue, isNull);
+
+      h.api.queue = queueOf(['a', 'b']);
+      h.handle('state', remote(h));
+      h.tick();
+      expect(h.state.remoteQueue?.songs.length, 2);
+      stop();
+    });
+
+    fakeTest('a throwing fetch is survived', (h) {
+      setUpQueue(h);
+      h.api.queueError = StateError('boom');
+      final stop = h.connect.watchRemoteQueue();
+      h.tick(const Duration(seconds: 5));
+      expect(h.api.queueCalls, 1);
+      expect(h.state.remoteQueue, isNull);
+      stop();
+    });
+
+    fakeTest(
+        'a view already ahead of the last state does not turn into a request loop',
+        (h) {
+      setUpQueue(h);
+      h.api.queue = queueOf(['a', 'b', 'c', 'd'], version: 1);
+      h.handle('state',
+          remote(h, version: 3)); // behind: the server keeps answering "1"
+      final stop = h.connect.watchRemoteQueue();
+      h.tick(const Duration(seconds: 5));
+      expect(h.api.queueCalls,
+          lessThanOrEqualTo(2)); // the fetch and at most one look-again
+      stop();
+    });
+
+    fakeTest('removing sends the real position and id, and shows it at once',
+        (h) {
+      setUpQueue(h);
+      final stop = h.connect.watchRemoteQueue();
+      h.tick();
+
+      h.player.removeFromQueue(2); // forwarded: this phone is only a remote
+      h.tick();
+
+      expect(h.api.commands.last, (CommandType.queueRemove, null, other));
+      expect((h.api.commandArgs.last?.index, h.api.commandArgs.last?.songId),
+          (2, 'c'));
+      expect(h.state.remoteQueue?.songs.map((s) => s.id), ['a', 'b', 'd']);
+      verifyNever(() => h.handler.removeQueueItemAt(any()));
+      stop();
+    });
+
+    fakeTest(
+        'a library that dropped some ids: edits use the real positions, not the shown ones',
+        (h) {
+      setUpQueue(h, ids: ['a', 'c', 'd'], positions: [0, 2, 3]);
+      final stop = h.connect.watchRemoteQueue();
+      h.tick();
+
+      h.player
+          .removeFromQueue(1); // "c" is shown 2nd but sits at real position 2
+      h.tick();
+      expect((h.api.commandArgs.last?.index, h.api.commandArgs.last?.songId),
+          (2, 'c'));
+      stop();
+    });
+
+    fakeTest('reordering is sent from/to in real positions and shown at once',
+        (h) {
+      setUpQueue(h);
+      final stop = h.connect.watchRemoteQueue();
+      h.tick();
+
+      h.player.reorderQueue(0, 3);
+      h.tick();
+
+      expect(h.api.commands.last, (CommandType.queueMove, null, other));
+      final a = h.api.commandArgs.last!;
+      expect((a.index, a.to, a.songId), (0, 3, 'a'));
+      expect(h.state.remoteQueue?.songs.map((s) => s.id), ['b', 'c', 'd', 'a']);
+      expect(h.state.remoteQueue?.index,
+          0); // the playing "b" moved up with the list
+      verifyNever(() => h.handler.moveQueueItem(any(), any()));
+      stop();
+    });
+
+    fakeTest('playing a queue item jumps there on the other device', (h) {
+      setUpQueue(h);
+      final stop = h.connect.watchRemoteQueue();
+      h.tick();
+      h.connect.playRemoteQueueItem(3);
+      h.tick();
+      expect(h.api.commands.last, (CommandType.queuePlay, null, other));
+      expect((h.api.commandArgs.last?.index, h.api.commandArgs.last?.songId),
+          (3, 'd'));
+      stop();
+    });
+
+    fakeTest('edits nothing when the queue is not loaded or the index is stale',
+        (h) {
+      setUpQueue(h);
+      h.player.removeFromQueue(0); // not watching: no view
+      h.player.reorderQueue(0, 1);
+      h.connect.playRemoteQueueItem(0);
+      final stop = h.connect.watchRemoteQueue();
+      h.tick();
+      final before = h.api.commands.length;
+      h.player.removeFromQueue(9);
+      h.player.reorderQueue(0, 9);
+      h.connect.playRemoteQueueItem(9);
+      h.tick();
+      expect(h.api.commands.length, before);
+      stop();
+    });
+  });
+
+  group('adding to the other device\'s queue', () {
+    fakeTest(
+        '"Add to queue" reaches the other device instead of this phone\'s own queue',
+        (h) {
+      h.startOnline();
+      h.otherIsPlaying();
+
+      h.player.addToQueue(song('x'), h.client, h.downloads);
+      h.tick(const Duration(milliseconds: 100));
+
+      expect(h.api.commands.last, (CommandType.queueAdd, null, other));
+      expect(h.api.commandArgs.last?.mode, QueueAddMode.next);
+      expect(h.api.commandArgs.last?.songIds, ['x']);
+      verifyNever(() => h.handler.insertAt(any(), any()));
+      expect(h.messages.last, '1 song will play next on Phone');
+    });
+
+    fakeTest(
+        'songs added in quick succession are one command, in the order added',
+        (h) {
+      h.startOnline();
+      h.otherIsPlaying();
+
+      for (final id in ['s1', 's2', 's3']) {
+        h.player.addToQueue(song(id), h.client, h.downloads);
+      }
+      h.tick(const Duration(milliseconds: 100));
+
+      expect(h.api.commands.length, 1);
+      expect(h.api.commandArgs.last?.songIds, ['s1', 's2', 's3']);
+      expect(h.messages.last, '3 songs will play next on Phone');
+    });
+
+    fakeTest('very large additions are split into commands the server accepts',
+        (h) {
+      h.startOnline();
+      h.otherIsPlaying();
+      for (var i = 0; i < 230; i++) {
+        h.player.addToQueue(song('s$i'), h.client, h.downloads);
+      }
+      h.tick(const Duration(milliseconds: 100));
+
+      expect(h.api.commandArgs.map((a) => a?.songIds?.length), [100, 100, 30]);
+      expect(h.api.commandArgs.expand((a) => a!.songIds!).toList(),
+          [for (var i = 0; i < 230; i++) 's$i']);
+    });
+
+    fakeTest('does not claim success when the command was not delivered', (h) {
+      h.startOnline();
+      h.otherIsPlaying();
+      h.api.commandResult = CommandResult.noActiveDevice;
+      h.player.addToQueue(song('x'), h.client, h.downloads);
+      h.tick(const Duration(milliseconds: 100));
+      expect(h.messages.last, contains("isn't reachable"));
+      expect(h.messages.where((m) => m.contains('will play next')), isEmpty);
+    });
+  });
+
+  group('queue commands executed on this phone', () {
+    Map<String, dynamic> cmd(Harness h, String type, Map<String, dynamic> more,
+            {String? id}) =>
+        {
+          'commandId': id ?? 'q-${h.nowMs}-$type-${more.hashCode}',
+          'type': type,
+          'expiresAtMs': h.nowMs + 5000,
+          ...more,
+        };
+
+    void stubQueueOps(Harness h) {
+      when(() => h.handler.insertAt(any(), any())).thenAnswer((_) async {});
+      when(() => h.handler.removeQueueItemAt(any())).thenAnswer((_) async {});
+      when(() => h.handler.moveQueueItem(any(), any()))
+          .thenAnswer((_) async {});
+      when(() => h.handler.playFromIndex(any())).thenAnswer((_) async {});
+    }
+
+    void playing(Harness h) {
+      stubQueueOps(h);
+      h.startOnline();
+      h.playLocally(index: 1, queue: [
+        for (final id in ['a', 'b', 'c', 'd']) song(id)
+      ]);
+    }
+
+    fakeTest('queue_remove removes the named song', (h) {
+      playing(h);
+      h.handle('command', cmd(h, 'queue_remove', {'index': 3, 'songId': 'd'}));
+      verify(() => h.handler.removeQueueItemAt(3)).called(1);
+    });
+
+    fakeTest(
+        'queue_remove is dropped when the song at that index is not the one the sender saw',
+        (h) {
+      playing(h);
+      h.handle('command', cmd(h, 'queue_remove', {'index': 3, 'songId': 'c'}));
+      h.handle('command', cmd(h, 'queue_remove', {'index': 9, 'songId': 'c'}));
+      verifyNever(() => h.handler.removeQueueItemAt(any()));
+    });
+
+    fakeTest('queue_remove never removes the song that is playing', (h) {
+      playing(h);
+      h.handle('command', cmd(h, 'queue_remove', {'index': 1, 'songId': 'b'}));
+      verifyNever(() => h.handler.removeQueueItemAt(any()));
+    });
+
+    fakeTest('queue_move moves the named song', (h) {
+      playing(h);
+      h.handle('command',
+          cmd(h, 'queue_move', {'index': 0, 'to': 3, 'songId': 'a'}));
+      verify(() => h.handler.moveQueueItem(0, 3)).called(1);
+    });
+
+    fakeTest(
+        'queue_move is dropped for a stale index or a destination outside the queue',
+        (h) {
+      playing(h);
+      h.handle('command',
+          cmd(h, 'queue_move', {'index': 0, 'to': 3, 'songId': 'zzz'}));
+      h.handle('command',
+          cmd(h, 'queue_move', {'index': 0, 'to': 9, 'songId': 'a'}));
+      h.handle('command',
+          cmd(h, 'queue_move', {'index': 0, 'to': -1, 'songId': 'a'}));
+      verifyNever(() => h.handler.moveQueueItem(any(), any()));
+    });
+
+    fakeTest('queue_play jumps to the named song', (h) {
+      playing(h);
+      h.handle('command', cmd(h, 'queue_play', {'index': 3, 'songId': 'd'}));
+      verify(() => h.handler.playFromIndex(3)).called(1);
+    });
+
+    fakeTest('queue_play is dropped for a stale index', (h) {
+      playing(h);
+      h.handle('command', cmd(h, 'queue_play', {'index': 3, 'songId': 'a'}));
+      h.handle('command', cmd(h, 'queue_play', {'index': 9, 'songId': 'd'}));
+      verifyNever(() => h.handler.playFromIndex(any()));
+    });
+
+    fakeTest(
+        'queue_add "next" queues the block after the current song, in order',
+        (h) {
+      playing(h);
+      h.handle(
+          'command',
+          cmd(h, 'queue_add', {
+            'mode': 'next',
+            'songs': [songJson('n1'), songJson('n2')],
+          }));
+      h.tick();
+      // current is index 1: n1 goes right after it, n2 after n1
+      verify(() => h.handler.insertAt(2, any())).called(1);
+      verify(() => h.handler.insertAt(3, any())).called(1);
+      expect(h.player.state.queue.map((s) => s.id),
+          ['a', 'b', 'n1', 'n2', 'c', 'd']);
+    });
+
+    fakeTest('queue_add "end" appends to the very end', (h) {
+      playing(h);
+      h.handle(
+          'command',
+          cmd(h, 'queue_add', {
+            'mode': 'end',
+            'songs': [songJson('x'), songJson('y')],
+          }));
+      h.tick();
+      verify(() => h.handler.insertAt(4, any())).called(1);
+      verify(() => h.handler.insertAt(5, any())).called(1);
+      expect(h.player.state.queue.map((s) => s.id),
+          ['a', 'b', 'c', 'd', 'x', 'y']);
+    });
+
+    fakeTest('queue_add without a known mode does nothing', (h) {
+      playing(h);
+      h.handle(
+          'command',
+          cmd(h, 'queue_add', {
+            'mode': 'sideways',
+            'songs': [songJson('no')],
+          }));
+      h.tick();
+      verifyNever(() => h.handler.insertAt(any(), any()));
+    });
+
+    fakeTest(
+        'the edited queue is reported, so the other devices see the new version',
+        (h) {
+      playing(h);
+      h.meIsActive();
+      h.tick(const Duration(seconds: 1));
+      h.api.reports.clear();
+      h.handle(
+          'command',
+          cmd(h, 'queue_add', {
+            'mode': 'end',
+            'songs': [songJson('x')],
+          }));
+      h.tick(const Duration(milliseconds: 500));
+      expect(h.api.reports.last.queueIds, ['a', 'b', 'c', 'd', 'x']);
     });
   });
 }

@@ -63,6 +63,9 @@ class PublicState {
   final bool shuffle;
   final bool counted;
 
+  /// The playing device's own player volume, 0.0–1.0 (1.0 from a server that doesn't say).
+  final double volume;
+
   const PublicState({
     required this.activeDeviceId,
     required this.playing,
@@ -76,6 +79,7 @@ class PublicState {
     required this.repeat,
     required this.shuffle,
     required this.counted,
+    this.volume = 1.0,
   });
 
   factory PublicState.fromJson(Map<String, dynamic> j) => PublicState(
@@ -93,9 +97,14 @@ class PublicState {
         repeat: loopModeFromWire(j['repeat'] as String?),
         shuffle: j['shuffle'] as bool? ?? false,
         counted: j['counted'] as bool? ?? false,
+        volume: ((j['volume'] as num?)?.toDouble() ?? 1.0).clamp(0.0, 1.0),
       );
 
-  PublicState copyWith({bool? playing, int? positionMs, int? positionAtMs}) =>
+  PublicState copyWith(
+          {bool? playing,
+          int? positionMs,
+          int? positionAtMs,
+          double? volume}) =>
       PublicState(
         activeDeviceId: activeDeviceId,
         playing: playing ?? this.playing,
@@ -109,6 +118,7 @@ class PublicState {
         repeat: repeat,
         shuffle: shuffle,
         counted: counted,
+        volume: volume ?? this.volume,
       );
 }
 
@@ -159,31 +169,130 @@ class LoadInstruction {
       );
 }
 
-enum CommandType { play, pause, next, previous, seek }
+enum CommandType {
+  play,
+  pause,
+  next,
+  previous,
+  seek,
+  // Phase 2: remote volume and remote queue editing.
+  volume,
+  queuePlay,
+  queueRemove,
+  queueMove,
+  queueAdd;
+
+  /// The name on the wire (the server uses snake_case).
+  String get wire => switch (this) {
+        CommandType.queuePlay => 'queue_play',
+        CommandType.queueRemove => 'queue_remove',
+        CommandType.queueMove => 'queue_move',
+        CommandType.queueAdd => 'queue_add',
+        _ => name,
+      };
+
+  static CommandType? fromWire(Object? v) {
+    for (final t in CommandType.values) {
+      if (t.wire == v) return t;
+    }
+    return null;
+  }
+}
+
+enum QueueAddMode { next, end }
+
+/// What a sender attaches to a command; which fields apply depends on the type (see the server's hub).
+class CommandArgs {
+  /// 0.0–1.0
+  final double? volume;
+
+  /// queue_play / queue_remove / queue_move: the real queue position of the song.
+  final int? index;
+
+  /// queue_move: where to put it.
+  final int? to;
+
+  /// The song the sender saw at [index]: the playing device ignores the command if the queue changed under it.
+  final String? songId;
+
+  /// queue_add: the songs, by id.
+  final List<String>? songIds;
+  final QueueAddMode? mode;
+
+  const CommandArgs(
+      {this.volume, this.index, this.to, this.songId, this.songIds, this.mode});
+
+  Map<String, Object?> toJson() => {
+        if (volume != null) 'volume': volume,
+        if (index != null) 'index': index,
+        if (to != null) 'to': to,
+        if (songId != null) 'songId': songId,
+        if (songIds != null) 'songIds': songIds,
+        if (mode != null) 'mode': mode!.name,
+      };
+}
 
 class CommandInstruction {
   final String commandId;
   final CommandType type;
   final int? positionMs;
   final int expiresAtMs;
+  final double? volume;
+  final int? index;
+  final int? to;
+  final String? songId;
+  final QueueAddMode? mode;
+
+  /// queue_add: the songs to queue, already resolved by the server.
+  final List<Song> songs;
 
   const CommandInstruction({
     required this.commandId,
     required this.type,
     required this.positionMs,
     required this.expiresAtMs,
+    this.volume,
+    this.index,
+    this.to,
+    this.songId,
+    this.mode,
+    this.songs = const [],
   });
 
   /// Null for a command type this client doesn't know (a newer server).
   static CommandInstruction? tryParse(Map<String, dynamic> j) {
-    final type = CommandType.values.where((t) => t.name == j['type']);
-    if (type.isEmpty) return null;
+    final type = CommandType.fromWire(j['type']);
+    if (type == null) return null;
+    final mode = QueueAddMode.values.where((m) => m.name == j['mode']);
     return CommandInstruction(
       commandId: j['commandId'] as String,
-      type: type.first,
-      positionMs: (j['positionMs'] as num?)?.toInt(),
-      expiresAtMs: (j['expiresAtMs'] as num?)?.toInt() ?? 0,
+      type: type,
+      positionMs:
+          j['positionMs'] is num ? (j['positionMs'] as num).toInt() : null,
+      expiresAtMs:
+          j['expiresAtMs'] is num ? (j['expiresAtMs'] as num).toInt() : 0,
+      // Fields of the wrong type are treated as absent: a malformed command must never throw into the stream.
+      volume: j['volume'] is num ? (j['volume'] as num).toDouble() : null,
+      index: j['index'] is num ? (j['index'] as num).toInt() : null,
+      to: j['to'] is num ? (j['to'] as num).toInt() : null,
+      songId: j['songId'] is String ? j['songId'] as String : null,
+      mode: mode.isEmpty ? null : mode.first,
+      // A song that doesn't parse is dropped rather than failing the whole command.
+      songs: (j['songs'] as List<dynamic>? ?? [])
+          .map((s) => s is Map<String, dynamic> && s['id'] is String
+              ? _tryParseSong(s)
+              : null)
+          .whereType<Song>()
+          .toList(),
     );
+  }
+}
+
+Song? _tryParseSong(Map<String, dynamic> j) {
+  try {
+    return Song.fromJson(j);
+  } catch (_) {
+    return null;
   }
 }
 
@@ -192,16 +301,31 @@ class QueueResult {
   final int index;
   final List<Song> songs;
 
-  const QueueResult(
-      {required this.queueVersion, required this.index, required this.songs});
+  /// Real queue position of each song (the library may have dropped some). Identity from older servers.
+  final List<int> positions;
 
-  factory QueueResult.fromJson(Map<String, dynamic> j) => QueueResult(
-        queueVersion: (j['queueVersion'] as num?)?.toInt() ?? 0,
-        index: (j['index'] as num?)?.toInt() ?? 0,
-        songs: (j['songs'] as List<dynamic>? ?? [])
-            .map((s) => Song.fromJson(s as Map<String, dynamic>))
-            .toList(),
-      );
+  QueueResult(
+      {required this.queueVersion,
+      required this.index,
+      required this.songs,
+      List<int>? positions})
+      : positions = positions ?? List.generate(songs.length, (i) => i);
+
+  factory QueueResult.fromJson(Map<String, dynamic> j) {
+    final songs = (j['songs'] as List<dynamic>? ?? [])
+        .map((s) => Song.fromJson(s as Map<String, dynamic>))
+        .toList();
+    final raw = j['positions'];
+    return QueueResult(
+      queueVersion: (j['queueVersion'] as num?)?.toInt() ?? 0,
+      index: (j['index'] as num?)?.toInt() ?? 0,
+      songs: songs,
+      // Ignore positions that don't line up with the songs rather than trusting them.
+      positions: raw is List && raw.length == songs.length
+          ? raw.map((p) => (p as num).toInt()).toList()
+          : null,
+    );
+  }
 }
 
 // ── Loop mode on the wire ─────────────────────────────────────────────────────

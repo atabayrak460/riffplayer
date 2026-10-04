@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:just_audio/just_audio.dart' show LoopMode;
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:riffplayer_mobile/api/types.dart';
@@ -51,6 +52,7 @@ class _Prefs implements ConnectPrefs {
 class SpyConnect extends ConnectNotifier {
   final transfers = <String>[];
   final renames = <String>[];
+  final volumes = <double>[];
 
   SpyConnect(PlayerNotifier player, MockDownloadService downloads)
       : super(
@@ -62,6 +64,9 @@ class SpyConnect extends ConnectNotifier {
         );
 
   void setTestState(ConnectState s) => state = s;
+
+  @override
+  void setVolume(double volume) => volumes.add(volume);
 
   @override
   Future<void> transferTo(String deviceId) async => transfers.add(deviceId);
@@ -308,6 +313,60 @@ void main() {
       expect(find.text('Android · This device'), findsOneWidget);
       expect(find.text('Web · Playing'), findsOneWidget);
       expect(find.text('Android · Unreachable'), findsOneWidget);
+    });
+
+    testWidgets(
+        'shows a volume slider for the device that is playing and drives its volume',
+        (tester) async {
+      connect.setTestState(ConnectState(
+        status: ConnectStatus.online,
+        deviceId: me,
+        deviceName: 'My phone',
+        devices: [device(me), device(phone, active: true)],
+        activeDeviceId: phone,
+        remote: const PublicState(
+          activeDeviceId: phone,
+          playing: true,
+          song: null,
+          index: 0,
+          queueLength: 1,
+          queueVersion: 1,
+          positionMs: 0,
+          positionAtMs: 0,
+          durationMs: null,
+          repeat: LoopMode.off,
+          shuffle: false,
+          counted: false,
+          volume: 0.25,
+        ),
+      ));
+      await open(tester);
+
+      final slider =
+          tester.widget<Slider>(find.byKey(const Key('remote-volume')));
+      expect(slider.value, 0.25);
+
+      slider.onChanged!(0.8);
+      expect(connect.volumes, [0.8]);
+    });
+
+    testWidgets(
+        'no volume slider when this device is the player, or the playing device is gone',
+        (tester) async {
+      setConnect(
+          devices: [device(me, active: true), device(phone)], active: me);
+      await open(tester);
+      expect(find.byKey(const Key('remote-volume')), findsNothing);
+      Navigator.of(tester.element(find.byType(DevicePickerSheet))).pop();
+      await tester.pumpAndSettle();
+
+      setConnect(devices: [
+        device(me),
+        device(phone, active: true, online: false, unreachable: true),
+      ], active: phone);
+      await tester.tap(find.byTooltip('Connect to a device'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('remote-volume')), findsNothing);
     });
 
     testWidgets(

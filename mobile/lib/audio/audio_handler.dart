@@ -69,6 +69,12 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
   final AudioPlayer _player = AudioPlayer();
   ConcatenatingAudioSource? _queue;
 
+  // The player's output volume is the user's volume (RiffPlayer Connect lets another device set it) times
+  // the current track's ReplayGain. There is still no master-volume control: the phone's own media volume
+  // is separate and untouched.
+  double _userVolume = 1.0;
+  double _gain = 1.0;
+
   RiffPlayerAudioHandler() {
     // Forward playback state to audio_service
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
@@ -79,8 +85,9 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
       final tag = state.currentSource?.tag;
       if (tag is MediaItem) {
         mediaItem.add(tag);
-        _player.setVolume(
-            _replayGainVolume(tag.extras?['replayGainTrackGain'] as double?));
+        _gain =
+            _replayGainVolume(tag.extras?['replayGainTrackGain'] as double?);
+        _player.setVolume(_userVolume * _gain);
       }
     });
 
@@ -91,6 +98,14 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
         state.sequence.map((s) => s.tag).whereType<MediaItem>().toList(),
       );
     });
+  }
+
+  /// The user's volume, 0.0–1.0 (before ReplayGain).
+  double get userVolume => _userVolume;
+
+  Future<void> setUserVolume(double volume) {
+    _userVolume = volume.clamp(0.0, 1.0);
+    return _player.setVolume(_userVolume * _gain);
   }
 
   // ── Queue management ────────────────────────────────────────────────────────

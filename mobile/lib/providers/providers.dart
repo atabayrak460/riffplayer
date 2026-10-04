@@ -328,8 +328,31 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     Song song,
     SubsonicClient client,
     DownloadService downloads,
+  ) {
+    final r = remote;
+    if (r != null && r.isRemote) {
+      // The other device's queue, not this one's: "Add to queue" lands where the music is playing.
+      r.queueAdd(song);
+      return Future.value();
+    }
+    return _serializeQueueOp(() => _addToQueueLocked(song, client, downloads));
+  }
+
+  /// Appends [song] to the very end of the queue (Connect's "add to the end"; [addToQueue] puts it next).
+  Future<void> addToQueueEnd(
+    Song song,
+    SubsonicClient client,
+    DownloadService downloads,
   ) =>
-      _serializeQueueOp(() => _addToQueueLocked(song, client, downloads));
+      _serializeQueueOp(() async {
+        final source = await buildAudioSource(song, client, downloads);
+        if (state.currentIndex < 0 || state.queue.isEmpty) {
+          await _addToQueueLocked(song, client, downloads);
+          return;
+        }
+        await _handler.insertAt(state.queue.length, source);
+        state = state.copyWith(queue: [...state.queue, song]);
+      });
 
   Future<void> _addToQueueLocked(
     Song song,
@@ -359,7 +382,16 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     _queuedCount++;
   }
 
-  Future<void> removeFromQueue(int index) => _serializeQueueOp(() async {
+  Future<void> removeFromQueue(int index) {
+    final r = remote;
+    if (r != null && r.isRemote) {
+      r.queueRemove(index);
+      return Future.value();
+    }
+    return _removeFromQueueLocal(index);
+  }
+
+  Future<void> _removeFromQueueLocal(int index) => _serializeQueueOp(() async {
         await _handler.removeQueueItemAt(index);
         final newSongs = [...state.queue]..removeAt(index);
         int newIdx = state.currentIndex;
@@ -367,7 +399,17 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         state = state.copyWith(queue: newSongs, currentIndex: newIdx);
       });
 
-  Future<void> reorderQueue(int from, int to) => _serializeQueueOp(() async {
+  Future<void> reorderQueue(int from, int to) {
+    final r = remote;
+    if (r != null && r.isRemote) {
+      r.queueMove(from, to);
+      return Future.value();
+    }
+    return _reorderQueueLocal(from, to);
+  }
+
+  Future<void> _reorderQueueLocal(int from, int to) =>
+      _serializeQueueOp(() async {
         await _handler.moveQueueItem(from, to);
         final newSongs = [...state.queue];
         final moved = newSongs.removeAt(from);
@@ -399,6 +441,18 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       for (final s in state.queue) s.id == songId ? s.withStarred(starred) : s,
     ];
     state = state.copyWith(queue: newQueue);
+  }
+
+  // The player's own volume (before ReplayGain), 0.0–1.0. Kept here so reading it never touches the audio
+  // handler. Session-only: a restart is back at full volume rather than silently quiet.
+  double _volume = 1.0;
+  double get volume => _volume;
+
+  /// Sets this device's player volume — what another device's volume control drives (Connect). While another
+  /// device is the one playing, the device picker's slider drives *its* volume instead.
+  Future<void> setVolume(double volume) {
+    _volume = volume.clamp(0.0, 1.0);
+    return _handler.setUserVolume(_volume);
   }
 
   void play() {
