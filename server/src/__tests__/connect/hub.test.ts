@@ -667,7 +667,7 @@ describe('validation helpers', () => {
 
   it('parseStateReport accepts a good report and rounds the position', () => {
     expect(parseStateReport({ queueIds: ['1', '2'], index: 1, positionMs: 1234.6, playing: true, repeat: 'all', shuffle: true })).toEqual({
-      queueIds: ['1', '2'], index: 1, positionMs: 1235, playing: true, repeat: 'all', shuffle: true, counted: false,
+      queueIds: ['1', '2'], index: 1, positionMs: 1235, playing: true, repeat: 'all', shuffle: true, counted: false, volume: 1,
     });
   });
 
@@ -930,5 +930,118 @@ describe('review: transfers away from a device that is already paused', () => {
     hub.reportState(U1, PC, report({ playing: true }));
 
     expect(hub.transfer(U1, PHONE, PHONE, true)).toEqual({ ok: true, status: 'pending' });
+  });
+});
+
+
+// ── Phase 2: remote volume and remote queue editing ──────────────────────────
+
+describe('phase 2: volume', () => {
+  it('parseStateReport keeps a reported volume (clamped) and defaults to full volume', () => {
+    const base = { index: 0, positionMs: 0, playing: true, repeat: 'off', shuffle: false };
+    expect((parseStateReport({ ...base, volume: 0.4 }) as StateReport).volume).toBe(0.4);
+    expect((parseStateReport({ ...base, volume: 7 }) as StateReport).volume).toBe(1);
+    expect((parseStateReport({ ...base, volume: -2 }) as StateReport).volume).toBe(0);
+    expect((parseStateReport({ ...base, volume: 'loud' }) as StateReport).volume).toBe(1);
+    expect((parseStateReport(base) as StateReport).volume).toBe(1);
+  });
+
+  it('is part of the public state, so controllers can show the playing device\'s volume', () => {
+    join(U1, PC);
+    const phone = join(U1, PHONE, 'android');
+    hub.reportState(U1, PC, report({ volume: 0.3 }));
+    expect(phone.probe.last('state')!.data.volume).toBe(0.3);
+    hub.reportState(U1, PC, report({ volume: undefined }));
+    expect(hub.snapshot(U1).state!.volume).toBe(1);
+  });
+
+  it('parseCommand accepts a volume command in 0..1 only', () => {
+    expect(parseCommand({ commandId: 'v', type: 'volume', volume: 0.55 })).toEqual({ commandId: 'v', type: 'volume', volume: 0.55 });
+    expect(parseCommand({ commandId: 'v', type: 'volume', volume: 0 })).toMatchObject({ volume: 0 });
+    for (const volume of [undefined, -0.1, 1.1, NaN, '0.5', null]) {
+      expect(typeof parseCommand({ commandId: 'v', type: 'volume', volume })).toBe('string');
+    }
+  });
+
+  it('is delivered to the active device with its value', () => {
+    const pc = join(U1, PC);
+    join(U1, PHONE, 'android');
+    hub.reportState(U1, PC, report());
+    pc.probe.clear();
+    hub.sendCommand(U1, PHONE, { commandId: 'v1', type: 'volume', volume: 0.25 });
+    expect(pc.probe.of('command')[0].data).toEqual({ commandId: 'v1', type: 'volume', volume: 0.25, expiresAtMs: clock + 5_000 });
+  });
+});
+
+describe('phase 2: queue commands', () => {
+  function playing() {
+    const pc = join(U1, PC);
+    join(U1, PHONE, 'android');
+    hub.reportState(U1, PC, report());
+    pc.probe.clear();
+    return pc;
+  }
+
+  it('parseCommand validates the arguments of every queue command', () => {
+    expect(parseCommand({ commandId: 'q', type: 'queue_play', index: 2, songId: 'b' })).toEqual({ commandId: 'q', type: 'queue_play', index: 2, songId: 'b' });
+    expect(parseCommand({ commandId: 'q', type: 'queue_remove', index: 0, songId: 'a' })).toMatchObject({ type: 'queue_remove', index: 0 });
+    expect(parseCommand({ commandId: 'q', type: 'queue_move', index: 0, to: 4, songId: 'a' })).toMatchObject({ index: 0, to: 4, songId: 'a' });
+    expect(parseCommand({ commandId: 'q', type: 'queue_add', mode: 'next', songIds: ['a', 'b'] })).toMatchObject({ mode: 'next', songIds: ['a', 'b'] });
+
+    const bad: unknown[] = [
+      { commandId: 'q', type: 'queue_play', songId: 'a' }, // no index
+      { commandId: 'q', type: 'queue_play', index: -1, songId: 'a' },
+      { commandId: 'q', type: 'queue_play', index: 1.5, songId: 'a' },
+      { commandId: 'q', type: 'queue_play', index: 5000, songId: 'a' },
+      { commandId: 'q', type: 'queue_remove', index: 0 }, // no songId guard
+      { commandId: 'q', type: 'queue_remove', index: 0, songId: '' },
+      { commandId: 'q', type: 'queue_remove', index: 0, songId: 'x'.repeat(33) },
+      { commandId: 'q', type: 'queue_move', index: 0, songId: 'a' }, // no target
+      { commandId: 'q', type: 'queue_move', index: 0, to: -3, songId: 'a' },
+      { commandId: 'q', type: 'queue_add', mode: 'next', songIds: [] },
+      { commandId: 'q', type: 'queue_add', mode: 'later', songIds: ['a'] },
+      { commandId: 'q', type: 'queue_add', mode: 'end', songIds: [1] },
+      { commandId: 'q', type: 'queue_add', mode: 'end', songIds: Array.from({ length: 101 }, (_, i) => String(i)) },
+      { commandId: 'q', type: 'queue_add', mode: 'end' },
+    ];
+    for (const body of bad) expect(typeof parseCommand(body)).toBe('string');
+  });
+
+  it('are relayed to the active device with their arguments, and only to it', () => {
+    const pc = playing();
+    hub.sendCommand(U1, PHONE, { commandId: 'q1', type: 'queue_move', index: 0, to: 2, songId: 'a' });
+    expect(pc.probe.of('command')[0].data).toEqual({
+      commandId: 'q1', type: 'queue_move', index: 0, to: 2, songId: 'a', expiresAtMs: clock + 5_000,
+    });
+  });
+
+  it('queue_add drops ids the library does not know, keeping the order', () => {
+    const pc = playing();
+    expect(hub.sendCommand(U1, PHONE, { commandId: 'q2', type: 'queue_add', mode: 'end', songIds: ['c', 'nope', 'a'] })).toEqual({ ok: true });
+    expect(pc.probe.of('command')[0].data).toMatchObject({ songIds: ['c', 'a'], mode: 'end' });
+  });
+
+  it('queue_add with nothing valid is refused and delivers nothing', () => {
+    const pc = playing();
+    expect(hub.sendCommand(U1, PHONE, { commandId: 'q3', type: 'queue_add', mode: 'next', songIds: ['nope'] }))
+      .toEqual({ ok: false, reason: 'no_valid_songs' });
+    expect(pc.probe.of('command')).toEqual([]);
+    // the refused command did not burn its id: a corrected retry with the same id still goes through
+    expect(hub.sendCommand(U1, PHONE, { commandId: 'q3', type: 'queue_add', mode: 'next', songIds: ['a'] })).toEqual({ ok: true });
+  });
+
+  it('queue edits respect the target guard like every other command', () => {
+    playing();
+    expect(hub.sendCommand(U1, PHONE, { commandId: 'q4', type: 'queue_remove', index: 1, songId: 'b' }, 'someone-else-1'))
+      .toEqual({ ok: false, reason: 'target_changed' });
+  });
+
+  it('queue() reports where each returned song sits in the real queue', () => {
+    join(U1, PC);
+    hub.reportState(U1, PC, report({ queueIds: ['zzz', 'a', 'gone', 'b'], index: 3 }));
+    const q = hub.queue(U1)!;
+    expect(q.songs.map((s) => s.id)).toEqual(['a', 'b']);
+    expect(q.positions).toEqual([1, 3]);
+    expect(q.index).toBe(1);
   });
 });

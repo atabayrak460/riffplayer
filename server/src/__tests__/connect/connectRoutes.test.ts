@@ -282,6 +282,37 @@ describe('state, commands and transfer between two devices', () => {
     expect(pc.events.some((e) => e.name === 'state')).toBe(false);
   });
 
+  it('relays volume and queue commands, and refuses malformed or unknown ones', async () => {
+    const token = await login();
+    const pc = await openStream(token, PC);
+    const phone = await openStream(token, PHONE);
+    await post(token, '/state', playing(PC));
+    await phone.next('state');
+
+    expect((await post(token, '/command', { deviceId: PHONE, commandId: 'vol-1', type: 'volume', volume: 0.4 })).status).toBe(202);
+    expect((await pc.next('command', (d) => d.commandId === 'vol-1')).data).toMatchObject({ type: 'volume', volume: 0.4 });
+
+    const add = await post(token, '/command', {
+      deviceId: PHONE, commandId: 'add-1', type: 'queue_add', mode: 'next', songIds: [String(trackIds[1]), '999999'],
+    });
+    expect(add.status).toBe(202);
+    expect((await pc.next('command', (d) => d.commandId === 'add-1')).data).toMatchObject({ songIds: [String(trackIds[1])], mode: 'next' });
+
+    expect((await post(token, '/command', { deviceId: PHONE, commandId: 'add-2', type: 'queue_add', mode: 'end', songIds: ['999999'] })).status).toBe(400);
+    expect((await post(token, '/command', { deviceId: PHONE, commandId: 'vol-2', type: 'volume', volume: 3 })).status).toBe(400);
+    expect((await post(token, '/command', { deviceId: PHONE, commandId: 'rm-1', type: 'queue_remove', index: 0 })).status).toBe(400);
+  });
+
+  it('GET /queue lists the songs with their real positions', async () => {
+    const token = await login();
+    await openStream(token, PC);
+    await post(token, '/state', playing(PC));
+    const res = await fetch(`${base}/api/v1/connect/queue`, { headers: { authorization: `Bearer ${token}` } });
+    const body = (await res.json()) as any;
+    expect(body.songs).toHaveLength(2);
+    expect(body.positions).toEqual([0, 1]);
+  });
+
   it('forwards a command only to the active device', async () => {
     const token = await login();
     const pc = await openStream(token, PC);

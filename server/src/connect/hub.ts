@@ -10,8 +10,34 @@ import { randomUUID } from 'node:crypto';
 export type DeviceType = 'web' | 'android' | 'desktop';
 export const DEVICE_TYPES: readonly DeviceType[] = ['web', 'android', 'desktop'];
 
-export const COMMAND_TYPES = ['play', 'pause', 'next', 'previous', 'seek'] as const;
+export const COMMAND_TYPES = [
+  'play', 'pause', 'next', 'previous', 'seek',
+  // Phase 2: remote volume and remote queue editing.
+  'volume', 'queue_play', 'queue_remove', 'queue_move', 'queue_add',
+] as const;
 export type CommandType = (typeof COMMAND_TYPES)[number];
+
+export type QueueAddMode = 'next' | 'end';
+const QUEUE_ADD_MODES: readonly QueueAddMode[] = ['next', 'end'];
+/** Songs one `queue_add` command may carry (an album is far below this). */
+export const MAX_QUEUE_ADD = 100;
+
+/** The arguments of a command beyond its type; which ones are present depends on the type. */
+export interface CommandArgs {
+  positionMs?: number;
+  /** 0..1 */
+  volume?: number;
+  /** queue_play / queue_remove: position in the queue. queue_move: where the song is now (`from`). */
+  index?: number;
+  to?: number;
+  /**
+   * The song the sender saw at `index`. The queue may have changed since the sender looked at it, and an
+   * index alone would then hit the wrong song — the device ignores the command if the ids differ.
+   */
+  songId?: string;
+  songIds?: string[];
+  mode?: QueueAddMode;
+}
 
 export type RepeatMode = 'off' | 'all' | 'one';
 const REPEAT_MODES: readonly RepeatMode[] = ['off', 'all', 'one'];
@@ -42,6 +68,8 @@ export interface PublicState {
   shuffle: boolean;
   /** The current play was already counted (scrobbled) by the reporting device. */
   counted: boolean;
+  /** The playing device's own player volume, 0..1 (1 if it doesn't say). */
+  volume: number;
 }
 
 export type ConnectEvent =
@@ -49,7 +77,7 @@ export type ConnectEvent =
   | { name: 'snapshot'; data: { devices: DeviceInfo[]; activeDeviceId: string | null; state: PublicState | null } }
   | { name: 'devices'; data: { devices: DeviceInfo[]; activeDeviceId: string | null } }
   | { name: 'state'; data: PublicState }
-  | { name: 'command'; data: { commandId: string; type: CommandType; positionMs?: number; expiresAtMs: number } }
+  | { name: 'command'; data: { commandId: string; type: CommandType; expiresAtMs: number } & CommandArgs }
   | { name: 'load'; data: { queueVersion: number; index: number; positionMs: number; play: boolean; counted: boolean } }
   | { name: 'revoked'; data: Record<string, never> };
 
@@ -73,6 +101,8 @@ export interface StateReport {
   repeat: RepeatMode;
   shuffle: boolean;
   counted: boolean;
+  /** 0..1; a client that doesn't report it is treated as playing at full volume. */
+  volume?: number;
 }
 
 export interface HubOptions {
@@ -139,6 +169,7 @@ interface StoredState {
   repeat: RepeatMode;
   shuffle: boolean;
   counted: boolean;
+  volume: number;
   queueVersion: number;
   durationMs: number | null;
   song: Record<string, unknown> | null;
@@ -212,13 +243,18 @@ export function parseStateReport(body: unknown): StateReport | string {
     repeat: b.repeat as RepeatMode,
     shuffle: b.shuffle,
     counted: b.counted === true,
+    // Older clients don't report a volume: treat them as full volume.
+    volume: isFiniteNumber(b.volume) ? clamp01(b.volume) : 1,
   };
 }
 
-export interface CommandInput {
+const clamp01 = (v: number) => Math.min(1, Math.max(0, Math.round(v * 1000) / 1000));
+const isQueueIndex = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) < MAX_QUEUE_IDS;
+const isSongId = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 32;
+
+export interface CommandInput extends CommandArgs {
   commandId: string;
   type: CommandType;
-  positionMs?: number;
 }
 
 export function parseCommand(body: unknown): CommandInput | string {
@@ -226,11 +262,35 @@ export function parseCommand(body: unknown): CommandInput | string {
   const b = body as Record<string, unknown>;
   if (typeof b.commandId !== 'string' || !b.commandId || b.commandId.length > 64) return 'commandId (string, max 64) required';
   if (!COMMAND_TYPES.includes(b.type as CommandType)) return `type must be one of ${COMMAND_TYPES.join(', ')}`;
-  if (b.type === 'seek') {
-    if (!isFiniteNumber(b.positionMs) || b.positionMs < 0 || b.positionMs > MAX_POSITION_MS) return 'seek needs a sane non-negative positionMs';
-    return { commandId: b.commandId, type: 'seek', positionMs: Math.round(b.positionMs) };
+  const base = { commandId: b.commandId, type: b.type as CommandType };
+
+  switch (b.type as CommandType) {
+    case 'seek':
+      if (!isFiniteNumber(b.positionMs) || b.positionMs < 0 || b.positionMs > MAX_POSITION_MS) return 'seek needs a sane non-negative positionMs';
+      return { ...base, positionMs: Math.round(b.positionMs) };
+    case 'volume':
+      if (!isFiniteNumber(b.volume) || b.volume < 0 || b.volume > 1) return 'volume needs a number between 0 and 1';
+      return { ...base, volume: clamp01(b.volume) };
+    case 'queue_play':
+    case 'queue_remove':
+      if (!isQueueIndex(b.index)) return 'index must be a valid queue position';
+      if (!isSongId(b.songId)) return 'songId (string, max 32) required';
+      return { ...base, index: b.index, songId: b.songId };
+    case 'queue_move':
+      if (!isQueueIndex(b.index) || !isQueueIndex(b.to)) return 'index and to must be valid queue positions';
+      if (!isSongId(b.songId)) return 'songId (string, max 32) required';
+      return { ...base, index: b.index, to: b.to, songId: b.songId };
+    case 'queue_add': {
+      if (!QUEUE_ADD_MODES.includes(b.mode as QueueAddMode)) return 'mode must be next or end';
+      if (!Array.isArray(b.songIds) || b.songIds.length === 0 || b.songIds.length > MAX_QUEUE_ADD) {
+        return `songIds must be 1-${MAX_QUEUE_ADD} ids`;
+      }
+      if (!b.songIds.every(isSongId)) return 'songIds must be non-empty strings';
+      return { ...base, songIds: b.songIds as string[], mode: b.mode as QueueAddMode };
+    }
+    default:
+      return base;
   }
-  return { commandId: b.commandId, type: b.type as CommandType };
 }
 
 // ── Hub ──────────────────────────────────────────────────────────────────────
@@ -387,7 +447,7 @@ export class ConnectHub {
     expectedActiveId?: string,
   ):
     | { ok: true; duplicate?: boolean }
-    | { ok: false; reason: 'unknown_device' | 'no_active_device' | 'self' | 'rate_limited' | 'target_changed' } {
+    | { ok: false; reason: 'unknown_device' | 'no_active_device' | 'self' | 'rate_limited' | 'target_changed' | 'no_valid_songs' } {
     const hub = this.users.get(userId);
     if (!hub?.devices.has(fromDeviceId)) return { ok: false, reason: 'unknown_device' };
     if (!this.allow(hub, 'command')) return { ok: false, reason: 'rate_limited' };
@@ -402,15 +462,25 @@ export class ConnectHub {
     if (!target) return { ok: false, reason: 'no_active_device' };
     if (target.id === fromDeviceId) return { ok: false, reason: 'self' };
 
+    // Only songs this user can actually play may be put into a queue; the rest are dropped (order kept).
+    let songIds = cmd.songIds;
+    if (cmd.type === 'queue_add' && songIds) {
+      const known = new Set(this.resolveSongs(userId, songIds).map((s) => s.id));
+      songIds = songIds.filter((id) => known.has(id));
+      if (songIds.length === 0) return { ok: false, reason: 'no_valid_songs' };
+    }
+
     hub.recentCommands.push(cmd.commandId);
     if (hub.recentCommands.length > RECENT_COMMANDS) hub.recentCommands.shift();
 
+    const { commandId, type, ...args } = cmd;
     this.emit(target, {
       name: 'command',
       data: {
-        commandId: cmd.commandId,
-        type: cmd.type,
-        ...(cmd.positionMs !== undefined ? { positionMs: cmd.positionMs } : {}),
+        commandId,
+        type,
+        ...args,
+        ...(songIds ? { songIds } : {}),
         expiresAtMs: this.now() + this.commandTtlMs,
       },
     });
@@ -484,19 +554,23 @@ export class ConnectHub {
   }
 
   /** The queue as full songs (unknown ids dropped) and the index of the current song within them. */
-  queue(userId: number): { queueVersion: number; index: number; songs: Record<string, unknown>[] } | null {
+  queue(userId: number): { queueVersion: number; index: number; songs: Record<string, unknown>[]; positions: number[] } | null {
     const hub = this.users.get(userId);
     if (!hub || !hub.state || hub.queueIds.length === 0) return null;
     const resolved = new Map(this.resolveSongs(userId, hub.queueIds).map((s) => [s.id, s]));
     const songs: Record<string, unknown>[] = [];
+    // Where each returned song sits in the real queue: ids the library no longer knows are skipped, which
+    // shifts everything after them, and queue edits are addressed by real position.
+    const positions: number[] = [];
     let index = 0;
     hub.queueIds.forEach((id, i) => {
       const song = resolved.get(id);
       if (!song) return;
       if (i < hub.state!.index) index++;
       songs.push(song.json);
+      positions.push(i);
     });
-    return { queueVersion: hub.queueVersion, index: Math.min(index, Math.max(0, songs.length - 1)), songs };
+    return { queueVersion: hub.queueVersion, index: Math.min(index, Math.max(0, songs.length - 1)), songs, positions };
   }
 
   // ── Time-driven housekeeping (called by the plugin every few seconds) ───────
@@ -672,6 +746,7 @@ export class ConnectHub {
       repeat: r.repeat,
       shuffle: r.shuffle,
       counted: r.counted,
+      volume: r.volume ?? 1,
       queueVersion: hub.queueVersion,
       durationMs,
       song,
@@ -740,6 +815,7 @@ export class ConnectHub {
       repeat: s.repeat,
       shuffle: s.shuffle,
       counted: s.counted,
+      volume: s.volume,
     };
   }
 

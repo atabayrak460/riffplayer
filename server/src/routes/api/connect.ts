@@ -226,6 +226,7 @@ export async function connectPlugin(app: FastifyInstance): Promise<void> {
     const r = hub.sendCommand(req.subsonicUser!.id, deviceId, cmd, target);
     if (r.ok) return reply.code(202).send({ delivered: true, duplicate: r.duplicate === true });
     if (r.reason === 'rate_limited') return reply.code(429).send({ error: 'rate_limited' });
+    if (r.reason === 'no_valid_songs') return bad(reply, 'none of the songs exist');
     return reply.code(409).send({ error: r.reason });
   });
 
