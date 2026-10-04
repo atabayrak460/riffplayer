@@ -683,7 +683,7 @@ class _ImportHistorySectionState extends ConsumerState<ImportHistorySection> {
 
   Future<String?> _pick() async {
     if (widget.pickFile != null) return widget.pickFile!();
-    final r = await FilePicker.pickFiles(
+    final r = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['zip', 'json', 'csv'],
     );
