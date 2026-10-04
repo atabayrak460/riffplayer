@@ -29,6 +29,8 @@ import 'screens/admin_screen.dart';
 import 'app_colors.dart';
 import 'providers/theme_provider.dart';
 import 'theme.dart';
+import 'tv/tv_detection.dart';
+import 'tv/tv_router.dart';
 import 'widgets/splash_overlay.dart';
 
 // Notifies GoRouter to re-run `redirect` whenever auth state changes.
@@ -67,110 +69,132 @@ class _RiffPlayerAppState extends ConsumerState<RiffPlayerApp>
       }
     }, fireImmediately: true);
 
-    _router = GoRouter(
-      initialLocation: '/login',
-      refreshListenable: _authRefresh,
-      redirect: (context, state) {
-        final auth = ref.read(authProvider);
-        if (auth.isLoading) return null; // wait for the stored session to load
+    _router = ref.read(isTvProvider)
+        ? buildTvRouter(ref, _authRefresh)
+        : GoRouter(
+            initialLocation: '/login',
+            refreshListenable: _authRefresh,
+            redirect: (context, state) {
+              final auth = ref.read(authProvider);
+              if (auth.isLoading) {
+                return null; // wait for the stored session to load
+              }
 
-        final loggedIn = auth.valueOrNull != null;
-        final atLogin = state.matchedLocation == '/login';
+              final loggedIn = auth.valueOrNull != null;
+              final atLogin = state.matchedLocation == '/login';
 
-        if (!loggedIn && !atLogin) return '/login';
-        if (loggedIn && atLogin) return '/home';
-        return null;
-      },
-      routes: [
-        GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+              if (!loggedIn && !atLogin) return '/login';
+              if (loggedIn && atLogin) return '/home';
+              return null;
+            },
+            routes: [
+              GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
 
-        // Full-screen player (outside the shell)
-        // Non-opaque + slide-up: while the player is pulled down to close,
-        // the screen underneath stays visible behind it.
-        GoRoute(
-          path: '/player',
-          pageBuilder: (_, state) => CustomTransitionPage<void>(
-            key: state.pageKey,
-            opaque: false,
-            transitionDuration: const Duration(milliseconds: 300),
-            reverseTransitionDuration: const Duration(milliseconds: 250),
-            child: const PlayerScreen(),
-            transitionsBuilder: (_, animation, __, child) => SlideTransition(
-              position:
-                  Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
-                      .animate(CurvedAnimation(
-                          parent: animation,
-                          curve: Curves.easeOutCubic,
-                          reverseCurve: Curves.easeInCubic)),
-              child: child,
-            ),
-          ),
-        ),
-        GoRoute(path: '/queue', builder: (_, __) => const QueueScreen()),
-
-        // Shell with bottom nav + mini player
-        ShellRoute(
-          builder: (_, __, child) => HomeScreen(child: child),
-          routes: [
-            GoRoute(path: '/home', builder: (_, __) => const HomePageScreen()),
-            GoRoute(path: '/albums', builder: (_, __) => const AlbumsScreen()),
-            GoRoute(path: '/songs', builder: (_, __) => const AllSongsScreen()),
-            GoRoute(
-              path: '/albums/:id',
-              builder: (_, state) =>
-                  AlbumDetailScreen(albumId: state.pathParameters['id']!),
-            ),
-            GoRoute(
-                path: '/artists', builder: (_, __) => const ArtistsScreen()),
-            GoRoute(
-              path: '/artists/:id',
-              builder: (_, state) => ArtistDetailScreen(
-                artistId: state.pathParameters['id']!,
-                initialSongsTab: state.uri.queryParameters['tab'] == 'songs',
+              // Full-screen player (outside the shell)
+              // Non-opaque + slide-up: while the player is pulled down to close,
+              // the screen underneath stays visible behind it.
+              GoRoute(
+                path: '/player',
+                pageBuilder: (_, state) => CustomTransitionPage<void>(
+                  key: state.pageKey,
+                  opaque: false,
+                  transitionDuration: const Duration(milliseconds: 300),
+                  reverseTransitionDuration: const Duration(milliseconds: 250),
+                  child: const PlayerScreen(),
+                  transitionsBuilder: (_, animation, __, child) =>
+                      SlideTransition(
+                    position: Tween<Offset>(
+                            begin: const Offset(0, 1), end: Offset.zero)
+                        .animate(CurvedAnimation(
+                            parent: animation,
+                            curve: Curves.easeOutCubic,
+                            reverseCurve: Curves.easeInCubic)),
+                    child: child,
+                  ),
+                ),
               ),
-            ),
-            GoRoute(path: '/search', builder: (_, __) => const SearchScreen()),
-            GoRoute(
-                path: '/favorites',
-                builder: (_, __) => const FavoritesScreen()),
-            GoRoute(
-                path: '/downloads',
-                builder: (_, __) => const DownloadsScreen()),
-            GoRoute(
-              path: '/downloads/playlists/:id',
-              builder: (_, state) => DownloadedPlaylistDetailScreen(
-                  playlistId: state.pathParameters['id']!),
-            ),
-            GoRoute(
-                path: '/library', builder: (_, __) => const LibraryScreen()),
-            GoRoute(path: '/people', builder: (_, __) => const PeopleScreen()),
-            GoRoute(
-              path: '/people/:id',
-              builder: (_, state) =>
-                  PersonScreen(id: int.parse(state.pathParameters['id']!)),
-            ),
-            GoRoute(
-              path: '/playlists/:id',
-              builder: (_, state) =>
-                  PlaylistDetailScreen(playlistId: state.pathParameters['id']!),
-            ),
-            GoRoute(
-                path: '/settings', builder: (_, __) => const SettingsScreen()),
-            GoRoute(
-                path: '/wrapped', builder: (_, __) => const WrappedScreen()),
-            GoRoute(
-                path: '/discover', builder: (_, __) => const DiscoverScreen()),
-            GoRoute(
-                path: '/recent',
-                builder: (_, __) => const RecentlyPlayedScreen()),
-            GoRoute(
-                path: '/most-played',
-                builder: (_, __) => const MostPlayedScreen()),
-            GoRoute(path: '/admin', builder: (_, __) => const AdminScreen()),
-          ],
-        ),
-      ],
-    );
+              GoRoute(path: '/queue', builder: (_, __) => const QueueScreen()),
+
+              // Shell with bottom nav + mini player
+              ShellRoute(
+                builder: (_, __, child) => HomeScreen(child: child),
+                routes: [
+                  GoRoute(
+                      path: '/home',
+                      builder: (_, __) => const HomePageScreen()),
+                  GoRoute(
+                      path: '/albums',
+                      builder: (_, __) => const AlbumsScreen()),
+                  GoRoute(
+                      path: '/songs',
+                      builder: (_, __) => const AllSongsScreen()),
+                  GoRoute(
+                    path: '/albums/:id',
+                    builder: (_, state) =>
+                        AlbumDetailScreen(albumId: state.pathParameters['id']!),
+                  ),
+                  GoRoute(
+                      path: '/artists',
+                      builder: (_, __) => const ArtistsScreen()),
+                  GoRoute(
+                    path: '/artists/:id',
+                    builder: (_, state) => ArtistDetailScreen(
+                      artistId: state.pathParameters['id']!,
+                      initialSongsTab:
+                          state.uri.queryParameters['tab'] == 'songs',
+                    ),
+                  ),
+                  GoRoute(
+                      path: '/search',
+                      builder: (_, __) => const SearchScreen()),
+                  GoRoute(
+                      path: '/favorites',
+                      builder: (_, __) => const FavoritesScreen()),
+                  GoRoute(
+                      path: '/downloads',
+                      builder: (_, __) => const DownloadsScreen()),
+                  GoRoute(
+                    path: '/downloads/playlists/:id',
+                    builder: (_, state) => DownloadedPlaylistDetailScreen(
+                        playlistId: state.pathParameters['id']!),
+                  ),
+                  GoRoute(
+                      path: '/library',
+                      builder: (_, __) => const LibraryScreen()),
+                  GoRoute(
+                      path: '/people',
+                      builder: (_, __) => const PeopleScreen()),
+                  GoRoute(
+                    path: '/people/:id',
+                    builder: (_, state) => PersonScreen(
+                        id: int.parse(state.pathParameters['id']!)),
+                  ),
+                  GoRoute(
+                    path: '/playlists/:id',
+                    builder: (_, state) => PlaylistDetailScreen(
+                        playlistId: state.pathParameters['id']!),
+                  ),
+                  GoRoute(
+                      path: '/settings',
+                      builder: (_, __) => const SettingsScreen()),
+                  GoRoute(
+                      path: '/wrapped',
+                      builder: (_, __) => const WrappedScreen()),
+                  GoRoute(
+                      path: '/discover',
+                      builder: (_, __) => const DiscoverScreen()),
+                  GoRoute(
+                      path: '/recent',
+                      builder: (_, __) => const RecentlyPlayedScreen()),
+                  GoRoute(
+                      path: '/most-played',
+                      builder: (_, __) => const MostPlayedScreen()),
+                  GoRoute(
+                      path: '/admin', builder: (_, __) => const AdminScreen()),
+                ],
+              ),
+            ],
+          );
   }
 
   @override

@@ -97,6 +97,8 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: 24),
             const _PlaybackSection(),
             const SizedBox(height: 24),
+            const LinkTvSection(),
+            const SizedBox(height: 24),
             const EqualizerSection(),
             const SizedBox(height: 16),
             const _PasswordSection(),
@@ -532,6 +534,101 @@ class _PlaybackSection extends ConsumerWidget {
           'Gapless playback is always on. Crossfade isn\'t available on the phone yet.',
           style: TextStyle(color: AppColors.muted, fontSize: 12),
         ),
+      ],
+    );
+  }
+}
+
+/// "Link a TV": type the code an Android TV shows, so it signs in without a password on the TV.
+class LinkTvSection extends ConsumerStatefulWidget {
+  const LinkTvSection({super.key});
+
+  @override
+  ConsumerState<LinkTvSection> createState() => _LinkTvSectionState();
+}
+
+class _LinkTvSectionState extends ConsumerState<LinkTvSection> {
+  final _code = TextEditingController();
+  bool _busy = false;
+  String? _message;
+  bool _ok = false;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _link() async {
+    final client = ref.read(apiClientProvider);
+    final code = _code.text.trim();
+    if (client == null || code.isEmpty || _busy) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final name = await client.approveDeviceCode(code);
+      if (!mounted) return;
+      setState(() {
+        _ok = true;
+        _message = '$name is now linked.';
+        _code.clear();
+      });
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final text = data is Map ? data['error'] as String? : null;
+      if (mounted) {
+        setState(() {
+          _ok = false;
+          _message = text ?? 'That didn\'t work. Please try again.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionLabel('Link a TV'),
+        const SizedBox(height: 8),
+        Text(
+          'Open RiffPlayer on your Android TV — it shows a code. Type it here to sign the TV in '
+          'without typing your password on it.',
+          style: TextStyle(color: AppColors.muted, fontSize: 12),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _code,
+                textCapitalization: TextCapitalization.characters,
+                maxLength: 12,
+                decoration: const InputDecoration(
+                    hintText: 'ABCD-EFGH', counterText: ''),
+                onSubmitted: (_) => _link(),
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton(
+              onPressed: _busy ? null : _link,
+              child: const Text('Link'),
+            ),
+          ],
+        ),
+        if (_message != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(_message!,
+                style: TextStyle(
+                    color: _ok ? AppColors.success : AppColors.danger,
+                    fontSize: 12)),
+          ),
       ],
     );
   }

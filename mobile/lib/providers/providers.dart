@@ -51,6 +51,13 @@ class AuthNotifier extends StateNotifier<AsyncValue<Credentials?>> {
     state = AsyncValue.data(saved);
   }
 
+  /// Signs in a device that was linked with a code: it already holds a session token and an API key
+  /// (and never the password), so there is nothing to exchange.
+  Future<void> loginLinked(Credentials creds) async {
+    await _svc.save(creds);
+    state = AsyncValue.data(creds);
+  }
+
   Future<void> logout() async {
     await _svc.clear();
     state = const AsyncValue.data(null);

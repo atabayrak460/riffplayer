@@ -4,11 +4,16 @@ class Credentials {
   final String password;
   final String? token; // JWT for /api/v1
 
+  /// A linked device (a TV paired with a code) signs in with an API key instead of the password,
+  /// which it never sees; [password] is then empty.
+  final String? apiKey;
+
   const Credentials({
     required this.serverUrl,
     required this.username,
     required this.password,
     this.token,
+    this.apiKey,
   });
 
   Credentials copyWith({String? token}) => Credentials(
@@ -16,6 +21,7 @@ class Credentials {
         username: username,
         password: password,
         token: token ?? this.token,
+        apiKey: apiKey,
       );
 }
 

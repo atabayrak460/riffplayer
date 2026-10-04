@@ -41,6 +41,17 @@ class SubsonicClient {
   }
 
   Map<String, String> _authParams() {
+    final key = credentials.apiKey;
+    if (key != null) {
+      // Linked device: OpenSubsonic API-key auth, no password involved.
+      return {
+        'u': credentials.username,
+        'apiKey': key,
+        'v': '1.16.1',
+        'c': 'riffplayer-flutter',
+        'f': 'json',
+      };
+    }
     return {
       'u': credentials.username,
       't': _token,
@@ -363,6 +374,16 @@ class SubsonicClient {
       options: Options(method: method, headers: headers),
     );
     return response.data ?? {};
+  }
+
+  // ── Linking a TV ────────────────────────────────────────────────────────────
+
+  /// The signed-in user approves the code a TV is showing; returns the TV's name.
+  /// Throws a [DioException] (message in `response?.data['error']`) for a wrong or expired code.
+  Future<String> approveDeviceCode(String userCode) async {
+    final r = await _apiCall('POST', 'auth/device-approve',
+        data: {'userCode': userCode});
+    return r['deviceName'] as String? ?? 'TV';
   }
 
   // ── Social: people, profiles, avatars ───────────────────────────────────────

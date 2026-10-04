@@ -10,6 +10,7 @@ import 'providers/equalizer_provider.dart';
 import 'providers/playback_settings_provider.dart';
 import 'providers/theme_provider.dart';
 import 'theme.dart';
+import 'tv/tv_detection.dart';
 
 void main() {
   // Catches anything FlutterError.onError doesn't (async errors outside a
@@ -51,11 +52,13 @@ void main() {
     audioHandler.setReplayGain(playback.replayGain, playback.preampDb);
 
     final equalizer = await loadEqualizerState();
+    final isTv = await detectAndroidTv();
 
     runApp(
       ProviderScope(
         overrides: [
           audioHandlerProvider.overrideWithValue(audioHandler),
+          isTvProvider.overrideWithValue(isTv),
           themeModeProvider.overrideWith((ref) => ThemeModeNotifier(themeMode)),
           skinProvider.overrideWith((ref) => SkinNotifier(skin)),
           playbackSettingsProvider.overrideWith(

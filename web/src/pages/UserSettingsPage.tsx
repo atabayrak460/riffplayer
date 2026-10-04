@@ -8,6 +8,7 @@ import { DeviceNameSection } from '../components/DeviceNameSection';
 import { AppearanceSection } from '../components/AppearanceSection';
 import { PlaybackSection } from '../components/PlaybackSection';
 import { ProfileSection } from '../components/ProfileSection';
+import { LinkedDevicesSection } from '../components/LinkedDevicesSection';
 import { EqualizerSection } from '../components/EqualizerSection';
 
 // Fetch current user preferences via /api/v1/users/me
@@ -230,6 +231,8 @@ export function AccountSettingsPanel() {
       </section>
 
       <DeviceNameSection />
+
+      <LinkedDevicesSection />
 
       <section>
         <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-4">ListenBrainz</h2>

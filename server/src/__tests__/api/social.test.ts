@@ -52,6 +52,12 @@ afterEach(async () => {
 const get = (url: string, qs = admin) => app.inject({ url: `/api/v1/${url}${url.includes('?') ? '&' : '?'}${qs}` });
 const patch = (url: string, payload: unknown, qs = admin) => app.inject({ method: 'PATCH', url: `/api/v1/${url}?${qs}`, payload: payload as object });
 const people = async (qs = admin) => ((await get('social/people', qs)).json() as { people: Json[] }).people;
+/** One person from the list; fails loudly (not with an undefined) if they are missing. */
+async function person(match: string | 'me', qs = admin): Promise<Json> {
+  const found = (await people(qs)).find((p) => (match === 'me' ? p.isMe : p.username === match));
+  if (!found) throw new Error(`no ${match} in the people list`);
+  return found;
+}
 
 function play(userId: number, secondsAgo: number) {
   getDb().prepare('INSERT INTO play_history (user_id, track_id, played_at) VALUES (?, ?, ?)')
@@ -71,14 +77,14 @@ describe('people', () => {
   it('lists everyone, falling back to the username when there is no display name', async () => {
     const list = await people();
     expect(list.map((p) => p.username).sort()).toEqual(['admin', 'bob']);
-    expect(list.find((p) => p.username === 'bob').displayName).toBe('bob');
-    expect(list.find((p) => p.username === 'admin').isMe).toBe(true);
-    expect(list.find((p) => p.username === 'bob').isMe).toBe(false);
+    expect((await person('bob')).displayName).toBe('bob');
+    expect((await person('admin')).isMe).toBe(true);
+    expect((await person('bob')).isMe).toBe(false);
   });
 
   it('shows a display name and bio once set', async () => {
     await patch('users/me/profile', { displayName: 'Bobby', bio: 'Jazz on Sundays' }, asBob());
-    const bobby = (await people()).find((p) => p.username === 'bob');
+    const bobby = (await person('bob'));
     expect(bobby).toMatchObject({ displayName: 'Bobby', bio: 'Jazz on Sundays' });
   });
 
@@ -97,14 +103,14 @@ describe('people', () => {
 describe('"now listening" is opt-in', () => {
   it('is hidden by default, even while someone is playing', async () => {
     play(bob, 20);
-    expect((await people()).find((p) => p.username === 'bob').nowListening).toBeNull();
+    expect((await person('bob')).nowListening).toBeNull();
     expect(((await get(`social/people/${bob}`)).json() as Json).profile.nowListening).toBeNull();
   });
 
   it('shows what they are playing once they turn it on', async () => {
     play(bob, 20);
     await patch('users/me/profile', { showListening: true }, asBob());
-    const now = (await people()).find((p) => p.username === 'bob').nowListening;
+    const now = (await person('bob')).nowListening;
     expect(now.title).toBe('Test Track');
     expect(now.artist).toBe('Test Artist');
   });
@@ -112,19 +118,19 @@ describe('"now listening" is opt-in', () => {
   it('disappears when the song is over, or the play was long ago', async () => {
     await patch('users/me/profile', { showListening: true }, asBob());
     play(bob, 600); // a 210 s song started 10 minutes ago
-    expect((await people()).find((p) => p.username === 'bob').nowListening).toBeNull();
+    expect((await person('bob')).nowListening).toBeNull();
   });
 
   it('turning it off hides it again at once', async () => {
     play(bob, 20);
     await patch('users/me/profile', { showListening: true }, asBob());
     await patch('users/me/profile', { showListening: false }, asBob());
-    expect((await people()).find((p) => p.username === 'bob').nowListening).toBeNull();
+    expect((await person('bob')).nowListening).toBeNull();
   });
 
   it('you always see your own, whatever your setting', async () => {
     play(1, 20);
-    expect((await people()).find((p) => p.isMe).nowListening?.title).toBe('Test Track');
+    expect((await person('me')).nowListening?.title).toBe('Test Track');
   });
 });
 
@@ -168,7 +174,7 @@ describe('PATCH /users/me/profile', () => {
 
   it('only ever changes the caller\'s own profile', async () => {
     await patch('users/me/profile', { displayName: 'Mine' });
-    expect((await people(asBob())).find((p) => p.username === 'bob').displayName).toBe('bob');
+    expect((await person('bob', asBob())).displayName).toBe('bob');
   });
 });
 
@@ -199,9 +205,9 @@ describe('avatars', () => {
     const meta = await sharp(img.rawPayload).metadata();
     expect([meta.format, meta.width, meta.height]).toEqual(['jpeg', 256, 256]);
 
-    const person = (await people()).find((p) => p.isMe);
-    expect(person.hasAvatar).toBe(true);
-    expect(person.avatarVersion).toBeGreaterThan(0);
+    const me = await person('me');
+    expect(me.hasAvatar).toBe(true);
+    expect(me.avatarVersion).toBeGreaterThan(0);
   });
 
   it('strips metadata such as GPS from the stored picture', async () => {

@@ -334,6 +334,29 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   return fetch(`${base}/api/v1/${path}`, { ...init, headers });
 }
 
+// ── Linked devices (TV pairing) ──────────────────────────────────────────────
+
+export interface LinkedDevice {
+  id: number;
+  name: string;
+  createdAt: number;
+  lastUsed: number | null;
+}
+
+/** Approves the code a TV is showing; resolves with the TV's name. Throws with the server's message for a wrong/expired code. */
+export async function approveDeviceCode(userCode: string): Promise<string> {
+  const r = (await apiCall('POST', 'auth/device-approve', { userCode })) as { deviceName: string };
+  return r.deviceName;
+}
+
+export async function getLinkedDevices(): Promise<LinkedDevice[]> {
+  return ((await apiCall('GET', 'users/me/linked-devices')) as { devices: LinkedDevice[] }).devices;
+}
+
+export async function unlinkDevice(id: number): Promise<void> {
+  await apiCall('DELETE', `users/me/linked-devices/${id}`);
+}
+
 // ── Social: people, profiles, avatars ───────────────────────────────────────
 
 export interface Person {
