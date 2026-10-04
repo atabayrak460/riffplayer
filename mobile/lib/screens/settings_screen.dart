@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +7,12 @@ import '../api/types.dart';
 import '../providers/providers.dart';
 import '../utils/snackbar.dart';
 import '../widgets/device_picker.dart';
+import '../app_colors.dart';
+import '../audio/replay_gain.dart';
+import '../audio/equalizer_model.dart';
+import '../providers/equalizer_provider.dart';
+import '../providers/playback_settings_provider.dart';
+import '../providers/theme_provider.dart';
 
 const _transcodeFormats = [
   (null, 'Original format'),
@@ -44,7 +51,7 @@ class SettingsScreen extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF18181B),
+                color: AppColors.background,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -55,7 +62,7 @@ class SettingsScreen extends ConsumerWidget {
                       creds.username.isNotEmpty
                           ? creds.username[0].toUpperCase()
                           : '?',
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: AppColors.text),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -65,15 +72,15 @@ class SettingsScreen extends ConsumerWidget {
                       children: [
                         Text(
                           creds.username,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: AppColors.text,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         Text(
                           creds.serverUrl,
                           style:
-                              const TextStyle(color: Color(0xFF71717A), fontSize: 12),
+                              TextStyle(color: AppColors.muted, fontSize: 12),
                         ),
                       ],
                     ),
@@ -81,6 +88,12 @@ class SettingsScreen extends ConsumerWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 24),
+            const _AppearanceSection(),
+            const SizedBox(height: 24),
+            const _PlaybackSection(),
+            const SizedBox(height: 24),
+            const EqualizerSection(),
             const SizedBox(height: 16),
             const _PasswordSection(),
             const SizedBox(height: 24),
@@ -103,17 +116,19 @@ class SettingsScreen extends ConsumerWidget {
                   const SizedBox(height: 8),
                   Container(
                     decoration: BoxDecoration(
-                      color: const Color(0xFF18181B),
+                      color: AppColors.background,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: ListTile(
-                      leading: const Icon(Icons.admin_panel_settings,
-                          color: Color(0xFF71717A)),
-                      title: const Text('Admin panel',
-                          style: TextStyle(color: Colors.white)),
-                      subtitle: const Text('Users, libraries, server settings',
-                          style: TextStyle(color: Color(0xFF71717A), fontSize: 12)),
-                      trailing: const Icon(Icons.chevron_right, color: Color(0xFF71717A)),
+                      leading: Icon(Icons.admin_panel_settings,
+                          color: AppColors.muted),
+                      title: Text('Admin panel',
+                          style: TextStyle(color: AppColors.text)),
+                      subtitle: Text('Users, libraries, server settings',
+                          style:
+                              TextStyle(color: AppColors.muted, fontSize: 12)),
+                      trailing:
+                          Icon(Icons.chevron_right, color: AppColors.muted),
                       onTap: () => context.push('/admin'),
                     ),
                   ),
@@ -127,8 +142,8 @@ class SettingsScreen extends ConsumerWidget {
             icon: const Icon(Icons.logout),
             label: const Text('Sign out'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red,
-              side: const BorderSide(color: Colors.red),
+              foregroundColor: AppColors.danger,
+              side: BorderSide(color: AppColors.danger),
               minimumSize: const Size.fromHeight(48),
             ),
           ),
@@ -171,7 +186,10 @@ class _PasswordSectionState extends ConsumerState<_PasswordSection> {
     }
     final client = ref.read(apiClientProvider);
     if (client == null) return;
-    setState(() { _saving = true; _error = null; });
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await client.changeMyPassword(_currentCtrl.text, _newCtrl.text);
       if (!mounted) return;
@@ -186,7 +204,9 @@ class _PasswordSectionState extends ConsumerState<_PasswordSection> {
       final message = (e.response?.data is Map)
           ? (e.response?.data as Map)['error'] as String?
           : null;
-      if (mounted) setState(() => _error = message ?? 'Failed to change password.');
+      if (mounted) {
+        setState(() => _error = message ?? 'Failed to change password.');
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -226,7 +246,252 @@ class _PasswordSectionState extends ConsumerState<_PasswordSection> {
         ),
         if (_error != null) ...[
           const SizedBox(height: 8),
-          Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+          Text(_error!,
+              style: TextStyle(color: AppColors.danger, fontSize: 12)),
+        ],
+      ],
+    );
+  }
+}
+
+class _AppearanceSection extends ConsumerWidget {
+  const _AppearanceSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(themeModeProvider);
+    final skin = ref.watch(skinProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionLabel('Appearance'),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<AppThemeMode>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: AppThemeMode.system, label: Text('System')),
+              ButtonSegment(value: AppThemeMode.dark, label: Text('Dark')),
+              ButtonSegment(value: AppThemeMode.light, label: Text('Light')),
+            ],
+            selected: {mode},
+            onSelectionChanged: (s) =>
+                ref.read(themeModeProvider.notifier).set(s.first),
+          ),
+        ),
+        const SizedBox(height: 16),
+        const _SectionLabel('Interface style'),
+        const SizedBox(height: 8),
+        RadioGroup<AppSkin>(
+          groupValue: skin,
+          onChanged: (v) {
+            if (v != null) ref.read(skinProvider.notifier).set(v);
+          },
+          child: Column(
+            children: [
+              for (final entry in skinLabels.entries)
+                RadioListTile<AppSkin>(
+                  value: entry.key,
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text(entry.value.$1),
+                  subtitle: Text(entry.value.$2,
+                      style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                ),
+            ],
+          ),
+        ),
+        if (skin != AppSkin.standard)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              "This style has its own colours, so the theme above doesn't apply to it.",
+              style: TextStyle(color: AppColors.muted, fontSize: 12),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _PlaybackSection extends ConsumerWidget {
+  const _PlaybackSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(playbackSettingsProvider);
+    final notifier = ref.read(playbackSettingsProvider.notifier);
+    final off = settings.replayGain == ReplayGainMode.off;
+    final db = settings.preampDb;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionLabel('Playback'),
+        const SizedBox(height: 8),
+        Text('Volume levelling (ReplayGain)',
+            style: TextStyle(color: AppColors.text, fontSize: 14)),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<ReplayGainMode>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: ReplayGainMode.off, label: Text('Off')),
+              ButtonSegment(value: ReplayGainMode.track, label: Text('Track')),
+              ButtonSegment(value: ReplayGainMode.album, label: Text('Album')),
+            ],
+            selected: {settings.replayGain},
+            onSelectionChanged: (s) => notifier.setReplayGain(s.first),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Uses the gain tags in your files. Album keeps an album\'s own dynamics. '
+          'The phone can\'t play louder than full volume, so a boost is capped there.',
+          style: TextStyle(color: AppColors.muted, fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Text('Pre-amp',
+                style: TextStyle(
+                    color: off ? AppColors.muted : AppColors.text,
+                    fontSize: 14)),
+            const Spacer(),
+            Text('${db > 0 ? '+' : ''}${db % 1 == 0 ? db.toInt() : db} dB',
+                style: TextStyle(color: AppColors.muted, fontSize: 13)),
+          ],
+        ),
+        Slider(
+          value: db,
+          min: -maxPreampDb,
+          max: maxPreampDb,
+          divisions: (maxPreampDb * 4).toInt(),
+          onChanged: off ? null : notifier.setPreampDb,
+        ),
+        Text(
+          'Gapless playback is always on. Crossfade isn\'t available on the phone yet.',
+          style: TextStyle(color: AppColors.muted, fontSize: 12),
+        ),
+      ],
+    );
+  }
+}
+
+/// Equalizer settings. Public so it can be tested on its own.
+class EqualizerSection extends ConsumerStatefulWidget {
+  const EqualizerSection({super.key});
+
+  @override
+  ConsumerState<EqualizerSection> createState() => _EqualizerSectionState();
+}
+
+class _EqualizerSectionState extends ConsumerState<EqualizerSection> {
+  @override
+  void initState() {
+    super.initState();
+    // The phone's equalizer only exists once audio has been loaded; ask now, and again on demand.
+    Future.microtask(() => ref.read(equalizerProvider.notifier).refresh());
+  }
+
+  static String _hz(double hz) => hz >= 1000
+      ? '${(hz / 1000).toStringAsFixed(hz % 1000 == 0 ? 0 : 1)}k'
+      : hz.round().toString();
+
+  @override
+  Widget build(BuildContext context) {
+    final eq = ref.watch(equalizerProvider);
+    final notifier = ref.read(equalizerProvider.notifier);
+    final bands = eq.bands;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionLabel('Equalizer'),
+        const SizedBox(height: 8),
+        if (defaultTargetPlatform != TargetPlatform.android)
+          Text('The equalizer is only available on Android.',
+              style: TextStyle(color: AppColors.muted, fontSize: 12))
+        else if (bands == null) ...[
+          Text(
+            'Play a song once and the phone\'s equalizer becomes available — it starts with the first song.',
+            style: TextStyle(color: AppColors.muted, fontSize: 12),
+          ),
+          TextButton(
+            onPressed: notifier.refresh,
+            child: const Text('Check again'),
+          ),
+        ] else ...[
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Enable equalizer'),
+            value: eq.enabled,
+            onChanged: notifier.setEnabled,
+          ),
+          Row(
+            children: [
+              DropdownButton<String>(
+                value: eq.preset,
+                dropdownColor: AppColors.surface,
+                items: [
+                  if (eq.preset == customPreset)
+                    const DropdownMenuItem(
+                        value: customPreset, child: Text(customPreset)),
+                  for (final name in eqPresets.keys)
+                    DropdownMenuItem(value: name, child: Text(name)),
+                ],
+                onChanged: (v) {
+                  if (v != null) notifier.applyPreset(v);
+                },
+              ),
+              const Spacer(),
+              TextButton(onPressed: notifier.reset, child: const Text('Reset')),
+            ],
+          ),
+          Opacity(
+            opacity: eq.enabled ? 1 : 0.5,
+            child: SizedBox(
+              height: 190,
+              child: Row(
+                children: [
+                  for (var i = 0; i < bands.centersHz.length; i++)
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Text(
+                              '${eq.gains[i] > 0 ? '+' : ''}${eq.gains[i] % 1 == 0 ? eq.gains[i].toInt() : eq.gains[i]}',
+                              style: TextStyle(
+                                  color: AppColors.muted, fontSize: 10)),
+                          Expanded(
+                            child: RotatedBox(
+                              quarterTurns: 3,
+                              child: Slider(
+                                semanticFormatterCallback: (_) =>
+                                    '${_hz(bands.centersHz[i])} Hz',
+                                value:
+                                    eq.gains[i].clamp(bands.minDb, bands.maxDb),
+                                min: bands.minDb,
+                                max: bands.maxDb,
+                                onChanged: (v) => notifier.setGain(i, v),
+                              ),
+                            ),
+                          ),
+                          Text(_hz(bands.centersHz[i]),
+                              style: TextStyle(
+                                  color: AppColors.muted, fontSize: 10)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          Text(
+            'This phone offers ${bands.centersHz.length} bands, set by its audio hardware.',
+            style: TextStyle(color: AppColors.muted, fontSize: 12),
+          ),
         ],
       ],
     );
@@ -239,8 +504,8 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
         text.toUpperCase(),
-        style: const TextStyle(
-          color: Color(0xFF71717A),
+        style: TextStyle(
+          color: AppColors.muted,
           fontSize: 12,
           fontWeight: FontWeight.w700,
           letterSpacing: 1.2,
@@ -253,7 +518,8 @@ class _PreferencesSection extends ConsumerStatefulWidget {
   const _PreferencesSection({required this.me});
 
   @override
-  ConsumerState<_PreferencesSection> createState() => _PreferencesSectionState();
+  ConsumerState<_PreferencesSection> createState() =>
+      _PreferencesSectionState();
 }
 
 class _PreferencesSectionState extends ConsumerState<_PreferencesSection> {
@@ -284,7 +550,10 @@ class _PreferencesSectionState extends ConsumerState<_PreferencesSection> {
   Future<void> _save(Map<String, dynamic> patch) async {
     final client = ref.read(apiClientProvider);
     if (client == null) return;
-    setState(() { _saving = true; _savedMsg = null; });
+    setState(() {
+      _saving = true;
+      _savedMsg = null;
+    });
     try {
       await client.updateMyPreferences(patch);
       if (mounted) setState(() => _savedMsg = 'Saved.');
@@ -302,9 +571,9 @@ class _PreferencesSectionState extends ConsumerState<_PreferencesSection> {
       children: [
         const _SectionLabel('Transcoding'),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'Preferred format/bitrate for mobile data saving. Leave as original to stream unmodified.',
-          style: TextStyle(color: Color(0xFF71717A), fontSize: 12),
+          style: TextStyle(color: AppColors.muted, fontSize: 12),
         ),
         const SizedBox(height: 10),
         Row(
@@ -312,10 +581,11 @@ class _PreferencesSectionState extends ConsumerState<_PreferencesSection> {
             Expanded(
               child: DropdownButtonFormField<String?>(
                 initialValue: _format,
-                dropdownColor: const Color(0xFF27272A),
+                dropdownColor: AppColors.surface,
                 decoration: const InputDecoration(isDense: true),
                 items: _transcodeFormats
-                    .map((f) => DropdownMenuItem(value: f.$1, child: Text(f.$2)))
+                    .map(
+                        (f) => DropdownMenuItem(value: f.$1, child: Text(f.$2)))
                     .toList(),
                 onChanged: (v) => setState(() => _format = v),
               ),
@@ -324,10 +594,11 @@ class _PreferencesSectionState extends ConsumerState<_PreferencesSection> {
             Expanded(
               child: DropdownButtonFormField<int?>(
                 initialValue: _bitrate,
-                dropdownColor: const Color(0xFF27272A),
+                dropdownColor: AppColors.surface,
                 decoration: const InputDecoration(isDense: true),
                 items: _bitrates
-                    .map((b) => DropdownMenuItem(value: b.$1, child: Text(b.$2)))
+                    .map(
+                        (b) => DropdownMenuItem(value: b.$1, child: Text(b.$2)))
                     .toList(),
                 onChanged: (v) => setState(() => _bitrate = v),
               ),
@@ -338,7 +609,8 @@ class _PreferencesSectionState extends ConsumerState<_PreferencesSection> {
         OutlinedButton(
           onPressed: _saving
               ? null
-              : () => _save({'transcode_format': _format, 'transcode_bitrate': _bitrate}),
+              : () => _save(
+                  {'transcode_format': _format, 'transcode_bitrate': _bitrate}),
           child: const Text('Save transcoding'),
         ),
         const SizedBox(height: 24),
@@ -346,13 +618,17 @@ class _PreferencesSectionState extends ConsumerState<_PreferencesSection> {
         const SizedBox(height: 8),
         TextField(
           controller: _lbCtrl,
-          decoration: const InputDecoration(hintText: 'ListenBrainz user token'),
+          decoration:
+              const InputDecoration(hintText: 'ListenBrainz user token'),
         ),
         const SizedBox(height: 8),
         OutlinedButton(
           onPressed: _saving
               ? null
-              : () => _save({'listenbrainz_token': _lbCtrl.text.trim().isEmpty ? null : _lbCtrl.text.trim()}),
+              : () => _save({
+                    'listenbrainz_token':
+                        _lbCtrl.text.trim().isEmpty ? null : _lbCtrl.text.trim()
+                  }),
           child: const Text('Save ListenBrainz'),
         ),
         const SizedBox(height: 24),
@@ -366,14 +642,21 @@ class _PreferencesSectionState extends ConsumerState<_PreferencesSection> {
         OutlinedButton(
           onPressed: _saving
               ? null
-              : () => _save({'lastfm_session_key': _lfmCtrl.text.trim().isEmpty ? null : _lfmCtrl.text.trim()}),
+              : () => _save({
+                    'lastfm_session_key': _lfmCtrl.text.trim().isEmpty
+                        ? null
+                        : _lfmCtrl.text.trim()
+                  }),
           child: const Text('Save Last.fm'),
         ),
         if (_savedMsg != null) ...[
           const SizedBox(height: 8),
           Text(_savedMsg!,
               style: TextStyle(
-                  color: _savedMsg == 'Saved.' ? Colors.green : Colors.red, fontSize: 12)),
+                  color: _savedMsg == 'Saved.'
+                      ? AppColors.success
+                      : AppColors.danger,
+                  fontSize: 12)),
         ],
       ],
     );

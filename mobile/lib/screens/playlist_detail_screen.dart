@@ -8,6 +8,7 @@ import '../utils/snackbar.dart';
 import '../widgets/cover_art.dart';
 import '../widgets/song_tile.dart';
 import '../widgets/stock_covers.dart' as stock;
+import '../app_colors.dart';
 
 enum PlaylistSortMode { custom, addedAsc, addedDesc }
 
@@ -121,8 +122,8 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                 child: Text(
                   playlist.name,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: AppColors.text,
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                   ),
@@ -133,7 +134,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                 '${playlist.owner} · ${songs.length} tracks'
                 '${songs.isNotEmpty ? ' · ${_fmtDuration(playlist.duration)}' : ''}',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFF71717A), fontSize: 13),
+                style: TextStyle(color: AppColors.muted, fontSize: 13),
               ),
               const SizedBox(height: 12),
               GestureDetector(
@@ -141,7 +142,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF18181B),
+                    color: AppColors.background,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
@@ -150,8 +151,8 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                         : 'Add a description…',
                     style: TextStyle(
                       color: playlist.comment?.isNotEmpty == true
-                          ? const Color(0xFFA1A1AA)
-                          : const Color(0xFF52525B),
+                          ? AppColors.mutedLight
+                          : AppColors.border,
                       fontSize: 13,
                       fontStyle: playlist.comment?.isNotEmpty == true
                           ? FontStyle.normal
@@ -228,11 +229,11 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
               ],
               const SizedBox(height: 8),
               if (songs.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 32),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
                   child: Center(
                     child: Text('No tracks yet.',
-                        style: TextStyle(color: Color(0xFF71717A))),
+                        style: TextStyle(color: AppColors.muted)),
                   ),
                 )
               else if (_sortMode == PlaylistSortMode.custom)
@@ -400,7 +401,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
               child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text('Delete', style: TextStyle(color: AppColors.danger)),
           ),
         ],
       ),
@@ -427,13 +428,13 @@ class _SortChip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFF3F3F46) : Colors.transparent,
+            color: selected ? AppColors.surface2 : Colors.transparent,
             borderRadius: BorderRadius.circular(100),
           ),
           child: Text(
             label,
             style: TextStyle(
-              color: selected ? Colors.white : const Color(0xFF71717A),
+              color: selected ? AppColors.text : AppColors.muted,
               fontSize: 11.5,
             ),
           ),

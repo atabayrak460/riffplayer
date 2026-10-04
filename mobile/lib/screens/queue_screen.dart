@@ -4,13 +4,14 @@ import '../api/types.dart';
 import '../connect/connect_provider.dart';
 import '../providers/providers.dart';
 import '../widgets/song_tile.dart';
+import '../app_colors.dart';
 
-const _eyebrowStyle = TextStyle(
-  color: Color(0xFF71717A),
-  fontSize: 11,
-  fontWeight: FontWeight.w700,
-  letterSpacing: 1.2,
-);
+TextStyle get _eyebrowStyle => TextStyle(
+      color: AppColors.muted,
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 1.2,
+    );
 
 class QueueScreen extends ConsumerStatefulWidget {
   const QueueScreen({super.key});
@@ -82,7 +83,7 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
                   remoteActive && remoteQueue == null
                       ? 'Loading the queue…'
                       : 'The queue is empty.',
-                  style: const TextStyle(color: Color(0xFF71717A))),
+                  style: TextStyle(color: AppColors.muted)),
             )
           : ListView(
               padding: const EdgeInsets.only(bottom: 24),
@@ -96,8 +97,8 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
                             fontSize: 12)),
                   ),
                 if (current != null) ...[
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                     child: Text('NOW PLAYING', style: _eyebrowStyle),
                   ),
                   SongTile(
@@ -110,8 +111,8 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
                   ),
                 ],
                 if (upNext.isNotEmpty) ...[
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 20, 16, 4),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
                     child: Text('NEXT UP', style: _eyebrowStyle),
                   ),
                   ReorderableListView.builder(

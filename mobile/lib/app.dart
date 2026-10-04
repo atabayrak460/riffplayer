@@ -25,7 +25,10 @@ import 'screens/discover_screen.dart';
 import 'screens/recently_played_screen.dart';
 import 'screens/most_played_screen.dart';
 import 'screens/admin_screen.dart';
+import 'app_colors.dart';
+import 'providers/theme_provider.dart';
 import 'theme.dart';
+import 'widgets/splash_overlay.dart';
 
 // Notifies GoRouter to re-run `redirect` whenever auth state changes.
 class _AuthRefreshNotifier extends ChangeNotifier {
@@ -42,11 +45,13 @@ class RiffPlayerApp extends ConsumerStatefulWidget {
 class _RiffPlayerAppState extends ConsumerState<RiffPlayerApp>
     with WidgetsBindingObserver {
   final _authRefresh = _AuthRefreshNotifier();
+  AppSkin _skin = AppSkin.standard;
   late final GoRouter _router;
 
   @override
   void initState() {
     super.initState();
+    _skin = ref.read(skinProvider);
     ref.listenManual(authProvider, (_, __) => _authRefresh.notify());
 
     // RiffPlayer Connect follows the session: connected while signed in, gone on sign-out.
@@ -79,7 +84,27 @@ class _RiffPlayerAppState extends ConsumerState<RiffPlayerApp>
         GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
 
         // Full-screen player (outside the shell)
-        GoRoute(path: '/player', builder: (_, __) => const PlayerScreen()),
+        // Non-opaque + slide-up: while the player is pulled down to close,
+        // the screen underneath stays visible behind it.
+        GoRoute(
+          path: '/player',
+          pageBuilder: (_, state) => CustomTransitionPage<void>(
+            key: state.pageKey,
+            opaque: false,
+            transitionDuration: const Duration(milliseconds: 300),
+            reverseTransitionDuration: const Duration(milliseconds: 250),
+            child: const PlayerScreen(),
+            transitionsBuilder: (_, animation, __, child) => SlideTransition(
+              position:
+                  Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
+                      .animate(CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeOutCubic,
+                          reverseCurve: Curves.easeInCubic)),
+              child: child,
+            ),
+          ),
+        ),
         GoRoute(path: '/queue', builder: (_, __) => const QueueScreen()),
 
         // Shell with bottom nav + mini player
@@ -155,12 +180,32 @@ class _RiffPlayerAppState extends ConsumerState<RiffPlayerApp>
     super.dispose();
   }
 
+  // "System" mode follows the device: re-evaluate when it flips.
+  @override
+  void didChangePlatformBrightness() => setState(() {});
+
   @override
   Widget build(BuildContext context) {
+    final mode = ref.watch(themeModeProvider);
+    final skin = ref.watch(skinProvider);
+    final palette = resolvePalette(mode, skin,
+        WidgetsBinding.instance.platformDispatcher.platformBrightness);
+    if (!identical(palette, AppColors.current) || skin != _skin) {
+      _skin = skin;
+      AppColors.current = palette;
+      applySystemChrome(palette);
+      // Colours are read from AppColors, not an InheritedWidget — repaint
+      // everything that was built with the old palette.
+      WidgetsBinding.instance.addPostFrameCallback((_) => rebuildAll());
+    }
     return MaterialApp.router(
       title: 'RiffPlayer',
-      theme: buildTheme(),
+      theme: buildTheme(AppColors.current, skin),
       routerConfig: _router,
+      builder: (context, child) => SkinBackdrop(
+        skin: skin,
+        child: SplashOverlay(child: child ?? const SizedBox.shrink()),
+      ),
       scaffoldMessengerKey: rootMessengerKey,
       debugShowCheckedModeBanner: false,
     );

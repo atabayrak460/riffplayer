@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/providers.dart';
 import '../widgets/cover_art.dart';
+import '../app_colors.dart';
 
 class ArtistsScreen extends ConsumerWidget {
   const ArtistsScreen({super.key});
@@ -28,8 +29,8 @@ class ArtistsScreen extends ConsumerWidget {
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                   child: Text(
                     index.name,
-                    style: const TextStyle(
-                      color: Color(0xFF71717A),
+                    style: TextStyle(
+                      color: AppColors.muted,
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 1.2,
@@ -51,13 +52,14 @@ class ArtistsScreen extends ConsumerWidget {
                     ),
                     title: Text(
                       artist.name,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      style: TextStyle(color: AppColors.text, fontSize: 14),
                     ),
                     subtitle: Text(
                       '${artist.albumCount} ${artist.albumCount == 1 ? 'album' : 'albums'}',
-                      style: const TextStyle(color: Color(0xFF71717A), fontSize: 12),
+                      style: TextStyle(color: AppColors.muted, fontSize: 12),
                     ),
-                    trailing: const Icon(Icons.chevron_right, color: Color(0xFF52525B)),
+                    trailing:
+                        Icon(Icons.chevron_right, color: AppColors.border),
                   ),
                 ),
               ],

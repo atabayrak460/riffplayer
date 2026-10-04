@@ -1,18 +1,10 @@
-import 'dart:math';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import '../api/types.dart';
 import '../api/subsonic.dart';
 import '../services/download_service.dart';
-
-/// Converts a ReplayGain track-gain dB value into a linear volume multiplier,
-/// clamped to just_audio's 0.0-1.0 range. Mirrors the web client's formula
-/// (`web/src/store/player.ts`) — there's no master-volume control on mobile
-/// to compose it with, so this is the final output volume.
-double _replayGainVolume(double? dbGain) {
-  if (dbGain == null) return 1.0;
-  return pow(10, dbGain / 20).toDouble().clamp(0.0, 1.0);
-}
+import 'equalizer_model.dart';
+import 'replay_gain.dart';
 
 /// Converts a [Song] into a [MediaItem] for lock-screen / notification
 /// display. Prefers [localCoverPath] (a downloaded track's on-disk cover)
@@ -38,6 +30,7 @@ MediaItem songToMediaItem(
               : null),
       extras: {
         'replayGainTrackGain': song.replayGainTrackGain,
+        'replayGainAlbumGain': song.replayGainAlbumGain,
         'songId': song.id,
       },
     );
@@ -66,7 +59,11 @@ Future<AudioSource> buildAudioSource(
 
 class RiffPlayerAudioHandler extends BaseAudioHandler
     with QueueHandler, SeekHandler {
-  final AudioPlayer _player = AudioPlayer();
+  // Android's built-in equalizer (the effect is a no-op on other platforms).
+  final AndroidEqualizer _equalizer = AndroidEqualizer();
+  late final AudioPlayer _player = AudioPlayer(
+    audioPipeline: AudioPipeline(androidAudioEffects: [_equalizer]),
+  );
   ConcatenatingAudioSource? _queue;
 
   // The player's output volume is the user's volume (RiffPlayer Connect lets another device set it) times
@@ -74,6 +71,12 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
   // is separate and untouched.
   double _userVolume = 1.0;
   double _gain = 1.0;
+
+  // ReplayGain settings, and the gains of the track now playing (kept so a settings change applies at once).
+  ReplayGainMode _rgMode = ReplayGainMode.track;
+  double _preampDb = 0;
+  double? _trackGainDb;
+  double? _albumGainDb;
 
   RiffPlayerAudioHandler() {
     // Forward playback state to audio_service
@@ -85,9 +88,9 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
       final tag = state.currentSource?.tag;
       if (tag is MediaItem) {
         mediaItem.add(tag);
-        _gain =
-            _replayGainVolume(tag.extras?['replayGainTrackGain'] as double?);
-        _player.setVolume(_userVolume * _gain);
+        _trackGainDb = tag.extras?['replayGainTrackGain'] as double?;
+        _albumGainDb = tag.extras?['replayGainAlbumGain'] as double?;
+        _applyGain();
       }
     });
 
@@ -99,6 +102,26 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
       );
     });
   }
+
+  void _applyGain() {
+    _gain = replayGainVolume(
+      mode: _rgMode,
+      trackGainDb: _trackGainDb,
+      albumGainDb: _albumGainDb,
+      preampDb: _preampDb,
+    );
+    _player.setVolume(_userVolume * _gain);
+  }
+
+  /// Applies new ReplayGain settings to the track that is playing right now.
+  void setReplayGain(ReplayGainMode mode, double preampDb) {
+    _rgMode = mode;
+    _preampDb = preampDb;
+    _applyGain();
+  }
+
+  /// The phone's equalizer, for the Equalizer settings.
+  EqualizerBackend get equalizerBackend => _AndroidEqualizerBackend(_equalizer);
 
   /// The user's volume, 0.0–1.0 (before ReplayGain).
   double get userVolume => _userVolume;
@@ -277,4 +300,33 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
   bool get playing => _player.playing;
   Duration get position => _player.position;
   Duration? get duration => _player.duration;
+}
+
+class _AndroidEqualizerBackend implements EqualizerBackend {
+  _AndroidEqualizerBackend(this._eq);
+  final AndroidEqualizer _eq;
+
+  @override
+  Future<EqBands?> bands() async {
+    try {
+      // Completes only once the player has been activated (audio loaded).
+      final p = await _eq.parameters.timeout(const Duration(milliseconds: 400));
+      return EqBands(
+        [for (final b in p.bands) b.centerFrequency],
+        p.minDecibels,
+        p.maxDecibels,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> setEnabled(bool enabled) => _eq.setEnabled(enabled);
+
+  @override
+  Future<void> setGain(int band, double db) async {
+    final p = await _eq.parameters;
+    if (band >= 0 && band < p.bands.length) await p.bands[band].setGain(db);
+  }
 }

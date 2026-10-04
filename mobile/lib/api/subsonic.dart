@@ -1,3 +1,4 @@
+import '../utils/credits.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
@@ -137,12 +138,15 @@ class SubsonicClient {
     return (artist: Artist.fromJson(a), albums: albums);
   }
 
+  /// [quality] ('lossless' | 'hires') is a RiffPlayer extension that keeps only
+  /// albums with at least one such track; stock servers ignore it.
   Future<List<Album>> getAlbumList(String type,
-      {int size = 50, int offset = 0}) async {
+      {int size = 50, int offset = 0, String? quality}) async {
     final r = await _get('getAlbumList2.view', {
       'type': type,
       'size': size.toString(),
       'offset': offset.toString(),
+      if (quality != null) 'quality': quality,
     });
     final list = (r['albumList2']?['album'] as List<dynamic>?) ?? [];
     return list.map((a) => Album.fromJson(a as Map<String, dynamic>)).toList();
@@ -183,18 +187,40 @@ class SubsonicClient {
   /// A flat, paginated view of every song in the library — a wildcard
   /// search3 query, matching the web client's approach (no dedicated
   /// server endpoint exists for this).
-  Future<List<Song>> getAllSongs(int offset, int limit) async {
+  ///
+  /// [genre] and [sort] ('title' | 'added_desc' | 'added_asc') are RiffPlayer
+  /// extensions to search3; stock Subsonic servers ignore them.
+  Future<List<Song>> getAllSongs(int offset, int limit,
+      {String? genre, String sort = 'title', String? quality}) async {
     final r = await _get('search3.view', {
       'query': '',
       'artistCount': '0',
       'albumCount': '0',
       'songCount': '$limit',
       'songOffset': '$offset',
+      if (genre != null) 'genre': genre,
+      if (quality != null) 'quality': quality,
+      'sort': sort,
     });
     final sr3 = r['searchResult3'] as Map<String, dynamic>? ?? {};
     return (sr3['song'] as List<dynamic>? ?? [])
         .map((s) => Song.fromJson(s as Map<String, dynamic>))
         .toList();
+  }
+
+  /// Every genre tag in the library with its song count (tracks with no
+  /// genre aren't listed).
+  Future<List<({String name, int songCount})>> getGenres() async {
+    final r = await _get('getGenres.view', {});
+    final list =
+        (r['genres'] as Map<String, dynamic>?)?['genre'] as List<dynamic>?;
+    return [
+      for (final g in list ?? const [])
+        (
+          name: (g as Map<String, dynamic>)['value'] as String,
+          songCount: (g['songCount'] as num?)?.toInt() ?? 0,
+        ),
+    ];
   }
 
   /// Synced (or plain-text) lyrics for a track, or null if none are
@@ -434,6 +460,14 @@ class SubsonicClient {
         : 'recommendations/wrapped/summary';
     final r = await _apiCall('POST', path);
     return r['summary'] as String? ?? '';
+  }
+
+  /// Credits read from a track's own tags, as ordered (label, value) rows —
+  /// only what the file says. Empty when there is nothing to show.
+  Future<List<(String, String)>> getTrackCredits(String id) async {
+    final r =
+        await _apiCall('GET', 'tracks/${Uri.encodeComponent(id)}/credits');
+    return creditRows((r['credits'] as Map<String, dynamic>?) ?? const {});
   }
 
   // ── User preferences ──────────────────────────────────────────────────────────

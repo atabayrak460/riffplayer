@@ -113,6 +113,7 @@ class Song {
   final String suffix;
   final String? starred;
   final double? replayGainTrackGain;
+  final double? replayGainAlbumGain;
 
   /// When this track was indexed into the library — the Subsonic `created`
   /// field. Shown as a "date added" column wherever the surrounding screen
@@ -120,6 +121,14 @@ class Song {
   final DateTime? created;
   final int? bitRate;
   final int? playCount;
+
+  /// Audio format details (OpenSubsonic names). Null until the server has
+  /// scanned the file with a version that records them.
+  final int? samplingRate;
+  final int? bitDepth;
+  final int? channelCount;
+  final String? codec;
+  final bool? lossless;
 
   const Song({
     required this.id,
@@ -137,9 +146,15 @@ class Song {
     required this.suffix,
     this.starred,
     this.replayGainTrackGain,
+    this.replayGainAlbumGain,
     this.created,
     this.bitRate,
     this.playCount,
+    this.samplingRate,
+    this.bitDepth,
+    this.channelCount,
+    this.codec,
+    this.lossless,
   });
 
   factory Song.fromJson(Map<String, dynamic> j) => Song(
@@ -158,11 +173,17 @@ class Song {
         suffix: j['suffix'] as String? ?? 'mp3',
         starred: j['starred'] as String?,
         replayGainTrackGain: (j['replayGainTrackGain'] as num?)?.toDouble(),
+        replayGainAlbumGain: (j['replayGainAlbumGain'] as num?)?.toDouble(),
         created: j['created'] != null
             ? DateTime.tryParse(j['created'] as String)
             : null,
         bitRate: (j['bitRate'] as num?)?.toInt(),
         playCount: (j['playCount'] as num?)?.toInt(),
+        samplingRate: (j['samplingRate'] as num?)?.toInt(),
+        bitDepth: (j['bitDepth'] as num?)?.toInt(),
+        channelCount: (j['channelCount'] as num?)?.toInt(),
+        codec: j['codec'] as String?,
+        lossless: j['lossless'] as bool?,
       );
 
   bool get isStarred => starred != null;
@@ -183,9 +204,15 @@ class Song {
         suffix: suffix,
         starred: starred,
         replayGainTrackGain: replayGainTrackGain,
+        replayGainAlbumGain: replayGainAlbumGain,
         created: created,
         bitRate: bitRate,
         playCount: playCount,
+        samplingRate: samplingRate,
+        bitDepth: bitDepth,
+        channelCount: channelCount,
+        codec: codec,
+        lossless: lossless,
       );
 }
 

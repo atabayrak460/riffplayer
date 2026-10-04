@@ -10,6 +10,7 @@ import '../utils/snackbar.dart';
 import 'add_to_playlist_dialog.dart';
 import 'cover_art.dart';
 import 'song_info_dialog.dart';
+import '../app_colors.dart';
 
 String _fmtDuration(int? seconds) {
   if (seconds == null) return '';
@@ -80,7 +81,7 @@ class SongTile extends ConsumerWidget {
                     style: TextStyle(
                       color: isCurrent
                           ? Theme.of(context).colorScheme.primary
-                          : const Color(0xFF71717A),
+                          : AppColors.muted,
                       fontSize: 14,
                     ),
                   ),
@@ -89,8 +90,9 @@ class SongTile extends ConsumerWidget {
       title: Text(
         song.title,
         style: TextStyle(
-          color:
-              isCurrent ? Theme.of(context).colorScheme.primary : Colors.white,
+          color: isCurrent
+              ? Theme.of(context).colorScheme.primary
+              : AppColors.text,
           fontWeight: isCurrent ? FontWeight.w600 : FontWeight.normal,
           fontSize: 14,
         ),
@@ -99,7 +101,7 @@ class SongTile extends ConsumerWidget {
       ),
       subtitle: Text(
         showAlbum ? '${song.artist} · ${song.album}' : song.artist,
-        style: const TextStyle(color: Color(0xFF71717A), fontSize: 12),
+        style: TextStyle(color: AppColors.muted, fontSize: 12),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -109,7 +111,7 @@ class SongTile extends ConsumerWidget {
           if (addedAt != null) ...[
             Text(
               _addedAtFormat.format(addedAt!),
-              style: const TextStyle(color: Color(0xFF71717A), fontSize: 12),
+              style: TextStyle(color: AppColors.muted, fontSize: 12),
             ),
             const SizedBox(width: 12),
           ],
@@ -123,12 +125,11 @@ class SongTile extends ConsumerWidget {
           ],
           Text(
             _fmtDuration(song.duration),
-            style: const TextStyle(color: Color(0xFF71717A), fontSize: 12),
+            style: TextStyle(color: AppColors.muted, fontSize: 12),
           ),
           const SizedBox(width: 4),
           PopupMenuButton<String>(
-            icon:
-                const Icon(Icons.more_vert, color: Color(0xFF71717A), size: 18),
+            icon: Icon(Icons.more_vert, color: AppColors.muted, size: 18),
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'queue', child: Text('Add to queue')),
               const PopupMenuItem(
@@ -145,9 +146,10 @@ class SongTile extends ConsumerWidget {
                 const PopupMenuItem(
                     value: 'remove', child: Text('Remove from queue')),
               if (isAdmin)
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'delete',
-                  child: Text('Delete song', style: TextStyle(color: Colors.red)),
+                  child: Text('Delete song',
+                      style: TextStyle(color: AppColors.danger)),
                 ),
             ],
             onSelected: (v) => _onMenu(v, context, ref),
@@ -186,7 +188,7 @@ class SongTile extends ConsumerWidget {
                 SlidableAction(
                   onPressed: (_) => _addToQueue(context, ref),
                   backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onBrand,
                   icon: Icons.queue_music,
                   label: 'Queue',
                 ),
@@ -221,7 +223,10 @@ class SongTile extends ConsumerWidget {
     final client = ref.read(apiClientProvider);
     if (client == null) return;
     final downloads = ref.read(downloadServiceProvider);
-    ref.read(playerProvider.notifier).addToQueue(song, client, downloads).then((_) {
+    ref
+        .read(playerProvider.notifier)
+        .addToQueue(song, client, downloads)
+        .then((_) {
       // ignore: use_build_context_synchronously
       showSnackBar(context, 'Added to queue');
     }).catchError((_) {
@@ -300,7 +305,8 @@ class SongTile extends ConsumerWidget {
     }
   }
 
-  Future<void> _confirmDelete(BuildContext context, SubsonicClient client) async {
+  Future<void> _confirmDelete(
+      BuildContext context, SubsonicClient client) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -314,7 +320,7 @@ class SongTile extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text('Delete', style: TextStyle(color: AppColors.danger)),
           ),
         ],
       ),

@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'audio/audio_handler.dart';
 import 'app.dart';
 import 'providers/providers.dart';
+import 'app_colors.dart';
+import 'providers/equalizer_provider.dart';
+import 'providers/playback_settings_provider.dart';
+import 'providers/theme_provider.dart';
 import 'theme.dart';
 
 void main() {
@@ -17,20 +20,13 @@ void main() {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
-    // Without this, the Android system navigation bar (and status bar) are
-    // left at the platform/OEM default — on this device (MIUI) that's a
-    // light bar with dark icons, clashing hard against the app's
-    // permanently-dark theme and reading as "not a real app" rather than a
-    // rendering bug. The app has no light-mode variant, so this fixed style
-    // is always correct, not just a startup default.
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      statusBarBrightness: Brightness.dark,
-      systemNavigationBarColor: appBackgroundColor,
-      systemNavigationBarIconBrightness: Brightness.light,
-      systemNavigationBarDividerColor: Colors.transparent,
-    ));
+    // Theme first, before any frame: the stored mode decides the palette, and
+    // the Android system bars are styled to match it (see applySystemChrome).
+    final themeMode = await loadThemeMode();
+    final skin = await loadSkin();
+    AppColors.current = resolvePalette(themeMode, skin,
+        WidgetsBinding.instance.platformDispatcher.platformBrightness);
+    applySystemChrome(AppColors.current);
 
     FlutterError.onError = (FlutterErrorDetails details) {
       FlutterError.presentError(details);
@@ -47,14 +43,25 @@ void main() {
         androidNotificationIcon: 'drawable/ic_stat_riff',
         androidNotificationOngoing: true,
         androidStopForegroundOnPause: true,
-        notificationColor: Color(0xFFA78BFA),
+        notificationColor: Color(0xFFF5A524),
       ),
     );
+
+    final playback = await loadPlaybackSettings();
+    audioHandler.setReplayGain(playback.replayGain, playback.preampDb);
+
+    final equalizer = await loadEqualizerState();
 
     runApp(
       ProviderScope(
         overrides: [
           audioHandlerProvider.overrideWithValue(audioHandler),
+          themeModeProvider.overrideWith((ref) => ThemeModeNotifier(themeMode)),
+          skinProvider.overrideWith((ref) => SkinNotifier(skin)),
+          playbackSettingsProvider.overrideWith(
+              (ref) => PlaybackSettingsNotifier(audioHandler, playback)),
+          equalizerProvider.overrideWith((ref) =>
+              EqualizerNotifier(audioHandler.equalizerBackend, equalizer)),
         ],
         child: const RiffPlayerApp(),
       ),

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../api/types.dart';
 import '../../providers/providers.dart';
 import '../song_tile.dart';
+import '../../app_colors.dart';
 
 const _cap = 8;
 
@@ -32,10 +33,10 @@ class ArtistTracksSection extends ConsumerWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'MORE FROM THIS ARTIST',
                     style: TextStyle(
-                      color: Color(0xFF71717A),
+                      color: AppColors.muted,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.1,

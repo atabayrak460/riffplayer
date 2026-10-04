@@ -19,6 +19,7 @@ Song _song(
   String? coverArt,
   int? duration,
   double? replayGainTrackGain,
+  double? replayGainAlbumGain,
 }) =>
     Song(
       id: id,
@@ -31,6 +32,7 @@ Song _song(
       coverArt: coverArt,
       duration: duration,
       replayGainTrackGain: replayGainTrackGain,
+      replayGainAlbumGain: replayGainAlbumGain,
     );
 
 void main() {
@@ -75,6 +77,12 @@ void main() {
 
       expect(extras['replayGainTrackGain'], -4.5);
       expect(extras['songId'], 't1');
+    });
+
+    test('also carries the album gain, for ReplayGain album mode', () {
+      final song = _song('t1', replayGainAlbumGain: -3.2);
+      expect(
+          songToMediaItem(song, client).extras!['replayGainAlbumGain'], -3.2);
     });
 
     test('prefers a local cover path over the network coverArtUrl', () {

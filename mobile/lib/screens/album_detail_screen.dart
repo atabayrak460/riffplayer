@@ -1,7 +1,10 @@
+import '../utils/quality.dart';
+import '../widgets/quality_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
 import '../widgets/song_tile.dart';
+import '../app_colors.dart';
 
 class AlbumDetailScreen extends ConsumerWidget {
   final String albumId;
@@ -13,7 +16,8 @@ class AlbumDetailScreen extends ConsumerWidget {
     final client = ref.read(apiClientProvider);
 
     return albumAsync.when(
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(body: Center(child: Text('Error: $e'))),
       data: (data) {
         final album = data.album;
@@ -33,7 +37,7 @@ class AlbumDetailScreen extends ConsumerWidget {
                 flexibleSpace: FlexibleSpaceBar(
                   background: coverUrl != null
                       ? Image.network(coverUrl, fit: BoxFit.cover)
-                      : Container(color: const Color(0xFF27272A)),
+                      : Container(color: AppColors.surface),
                 ),
               ),
               SliverToBoxAdapter(
@@ -44,8 +48,8 @@ class AlbumDetailScreen extends ConsumerWidget {
                     children: [
                       Text(
                         album.name,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: AppColors.text,
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
                         ),
@@ -53,8 +57,8 @@ class AlbumDetailScreen extends ConsumerWidget {
                       const SizedBox(height: 4),
                       Text(
                         album.artist,
-                        style: const TextStyle(
-                          color: Color(0xFFA78BFA),
+                        style: TextStyle(
+                          color: AppColors.brand,
                           fontSize: 15,
                         ),
                       ),
@@ -62,9 +66,13 @@ class AlbumDetailScreen extends ConsumerWidget {
                         const SizedBox(height: 2),
                         Text(
                           '${album.year} · ${songs.length} tracks',
-                          style: const TextStyle(
-                              color: Color(0xFF71717A), fontSize: 13),
+                          style:
+                              TextStyle(color: AppColors.muted, fontSize: 13),
                         ),
+                      ],
+                      if (albumQuality(songs) != null) ...[
+                        const SizedBox(height: 8),
+                        QualityBadge(quality: albumQuality(songs)),
                       ],
                       const SizedBox(height: 16),
                       ElevatedButton.icon(

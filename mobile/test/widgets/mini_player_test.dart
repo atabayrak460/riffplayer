@@ -115,6 +115,24 @@ void main() {
     expect(find.text('Now Playing Screen'), findsOneWidget);
   });
 
+  testWidgets('flicking the mini player upward opens /player', (tester) async {
+    await pumpMiniPlayer(tester, nowPlaying: _song('a'));
+
+    await tester.fling(find.byType(MiniPlayer), const Offset(0, -150), 1000);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Now Playing Screen'), findsOneWidget);
+  });
+
+  testWidgets('a slow upward drag does not open the player', (tester) async {
+    await pumpMiniPlayer(tester, nowPlaying: _song('a'));
+
+    await tester.fling(find.byType(MiniPlayer), const Offset(0, -40), 50);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Now Playing Screen'), findsNothing);
+  });
+
   group('transport buttons', () {
     testWidgets('play button calls play() when paused', (tester) async {
       await pumpMiniPlayer(tester, nowPlaying: _song('a'));

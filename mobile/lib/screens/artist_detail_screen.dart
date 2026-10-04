@@ -6,6 +6,7 @@ import '../api/types.dart';
 import '../providers/providers.dart';
 import '../widgets/cover_art.dart';
 import '../widgets/song_tile.dart';
+import '../app_colors.dart';
 
 enum _Tab { albums, songs }
 
@@ -65,8 +66,8 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                           children: [
                             Text(
                               artist.name,
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: AppColors.text,
                                 fontSize: 22,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -74,8 +75,8 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                             const SizedBox(height: 4),
                             Text(
                               '${albums.length} ${albums.length == 1 ? 'album' : 'albums'}',
-                              style: const TextStyle(
-                                  color: Color(0xFF71717A), fontSize: 13),
+                              style: TextStyle(
+                                  color: AppColors.muted, fontSize: 13),
                             ),
                           ],
                         ),
@@ -131,13 +132,13 @@ class _TabChip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFF3F3F46) : Colors.transparent,
+            color: selected ? AppColors.surface2 : Colors.transparent,
             borderRadius: BorderRadius.circular(100),
           ),
           child: Text(
             label,
             style: TextStyle(
-              color: selected ? Colors.white : const Color(0xFF71717A),
+              color: selected ? AppColors.text : AppColors.muted,
               fontSize: 13,
               fontWeight: FontWeight.w500,
             ),
@@ -181,21 +182,21 @@ class _AlbumsGrid extends StatelessWidget {
                         child: aCoverUrl != null
                             ? Image.network(aCoverUrl,
                                 fit: BoxFit.cover, width: double.infinity)
-                            : Container(color: const Color(0xFF27272A)),
+                            : Container(color: AppColors.surface),
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(album.name,
-                        style: const TextStyle(
-                            color: Colors.white,
+                        style: TextStyle(
+                            color: AppColors.text,
                             fontSize: 13,
                             fontWeight: FontWeight.w500),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis),
                     if (album.year != null)
                       Text('${album.year}',
-                          style: const TextStyle(
-                              color: Color(0xFF71717A), fontSize: 12)),
+                          style:
+                              TextStyle(color: AppColors.muted, fontSize: 12)),
                   ],
                 ),
               ),
@@ -227,12 +228,12 @@ class _SongsList extends ConsumerWidget {
         ),
       ),
       data: (songs) => songs.isEmpty
-          ? const SliverToBoxAdapter(
+          ? SliverToBoxAdapter(
               child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 32),
+                padding: const EdgeInsets.symmetric(vertical: 32),
                 child: Center(
                   child: Text('No songs found.',
-                      style: TextStyle(color: Color(0xFF71717A))),
+                      style: TextStyle(color: AppColors.muted)),
                 ),
               ),
             )

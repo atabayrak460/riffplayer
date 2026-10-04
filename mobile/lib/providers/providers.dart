@@ -593,6 +593,27 @@ final albumListProvider =
   return client.getAlbumList(type);
 });
 
+/// Albums filtered by audio quality ('lossless' | 'hires'); [quality] null = no filter.
+final filteredAlbumListProvider = FutureProvider.autoDispose
+    .family<List<Album>, ({String type, String? quality})>((ref, key) async {
+  final client = ref.read(apiClientProvider);
+  if (client == null) throw Exception('Not authenticated');
+  return client.getAlbumList(key.type, quality: key.quality);
+});
+
+/// Credits for a track, fetched when its info dialog opens. Any failure (the file
+/// unreadable, offline) simply means there are no credits to show.
+final trackCreditsProvider = FutureProvider.autoDispose
+    .family<List<(String, String)>, String>((ref, id) async {
+  final client = ref.read(apiClientProvider);
+  if (client == null) return const [];
+  try {
+    return await client.getTrackCredits(id);
+  } catch (_) {
+    return const [];
+  }
+});
+
 final artistsProvider =
     FutureProvider.autoDispose<List<ArtistIndex>>((ref) async {
   final client = ref.read(apiClientProvider);

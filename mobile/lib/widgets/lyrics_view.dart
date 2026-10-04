@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
+import '../app_colors.dart';
 
 /// Scrollable lyrics list shown in place of the cover art on the full-screen
 /// player. Highlights and auto-scrolls to the current line for synced
@@ -36,9 +37,10 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
   void _scrollToActive(int index, int lineCount) {
     if (!_scrollController.hasClients) return;
     final viewport = _scrollController.position.viewportDimension;
-    final maxScroll = (lineCount * _lineHeight - viewport).clamp(0.0, double.infinity);
-    final target =
-        (index * _lineHeight - viewport / 2 + _lineHeight / 2).clamp(0.0, maxScroll);
+    final maxScroll =
+        (lineCount * _lineHeight - viewport).clamp(0.0, double.infinity);
+    final target = (index * _lineHeight - viewport / 2 + _lineHeight / 2)
+        .clamp(0.0, maxScroll);
     _scrollController.animateTo(
       target,
       duration: const Duration(milliseconds: 300),
@@ -54,17 +56,19 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
       width: widget.size,
       height: widget.size,
       child: lyricsAsync.when(
-        loading: () => const Center(
-          child: Text('Loading lyrics…', style: TextStyle(color: Color(0xFF71717A))),
+        loading: () => Center(
+          child:
+              Text('Loading lyrics…', style: TextStyle(color: AppColors.muted)),
         ),
-        error: (_, __) => const Center(
-          child: Text('Lyrics unavailable.', style: TextStyle(color: Color(0xFF71717A))),
+        error: (_, __) => Center(
+          child: Text('Lyrics unavailable.',
+              style: TextStyle(color: AppColors.muted)),
         ),
         data: (lyrics) {
           if (lyrics == null || lyrics.line.isEmpty) {
-            return const Center(
+            return Center(
               child: Text('No lyrics found for this track.',
-                  style: TextStyle(color: Color(0xFF71717A))),
+                  style: TextStyle(color: AppColors.muted)),
             );
           }
 
@@ -112,7 +116,7 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: isActive ? Colors.white : const Color(0xFF71717A),
+                      color: isActive ? AppColors.text : AppColors.muted,
                       fontSize: isActive ? 17 : 14,
                       fontWeight:
                           isActive ? FontWeight.w700 : FontWeight.normal,

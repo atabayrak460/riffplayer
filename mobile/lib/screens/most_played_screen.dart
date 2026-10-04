@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
 import '../widgets/song_tile.dart';
 import '../widgets/stock_covers.dart' as stock;
+import '../app_colors.dart';
 
 class MostPlayedScreen extends ConsumerWidget {
   const MostPlayedScreen({super.key});
@@ -23,13 +24,15 @@ class MostPlayedScreen extends ConsumerWidget {
       ),
       body: songsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => const Center(
-          child: Text('Could not load history.', style: TextStyle(color: Color(0xFF71717A))),
+        error: (e, _) => Center(
+          child: Text('Could not load history.',
+              style: TextStyle(color: AppColors.muted)),
         ),
         data: (songs) {
           if (songs.isEmpty) {
-            return const Center(
-              child: Text('Nothing played yet.', style: TextStyle(color: Color(0xFF71717A))),
+            return Center(
+              child: Text('Nothing played yet.',
+                  style: TextStyle(color: AppColors.muted)),
             );
           }
           return ListView(
@@ -38,16 +41,21 @@ class MostPlayedScreen extends ConsumerWidget {
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                    stock.MostPlayedCover(size: 56, borderRadius: BorderRadius.circular(10)),
+                    stock.MostPlayedCover(
+                        size: 56, borderRadius: BorderRadius.circular(10)),
                     const SizedBox(width: 14),
-                    const Expanded(
+                    Expanded(
                       child: Text('Most Played',
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                          style: TextStyle(
+                              color: AppColors.text,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16)),
                     ),
                   ],
                 ),
               ),
-              ...songs.map((song) => SongTile(song: song, queue: songs, showAlbum: true)),
+              ...songs.map((song) =>
+                  SongTile(song: song, queue: songs, showAlbum: true)),
               const SizedBox(height: 24),
             ],
           );

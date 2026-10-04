@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../app_colors.dart';
 
 /// A horizontally-scrolling row of cards, used throughout the Home page.
 class HomeRow extends StatelessWidget {
@@ -7,7 +8,8 @@ class HomeRow extends StatelessWidget {
   final String? viewAllTo;
   final List<Widget> children;
 
-  const HomeRow({super.key, required this.title, this.viewAllTo, required this.children});
+  const HomeRow(
+      {super.key, required this.title, this.viewAllTo, required this.children});
 
   @override
   Widget build(BuildContext context) => Column(
@@ -18,8 +20,8 @@ class HomeRow extends StatelessWidget {
             children: [
               Text(
                 title.toUpperCase(),
-                style: const TextStyle(
-                  color: Color(0xFF71717A),
+                style: TextStyle(
+                  color: AppColors.muted,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.2,
@@ -28,9 +30,9 @@ class HomeRow extends StatelessWidget {
               if (viewAllTo != null)
                 GestureDetector(
                   onTap: () => context.push(viewAllTo!),
-                  child: const Text(
+                  child: Text(
                     'See all',
-                    style: TextStyle(color: Color(0xFF71717A), fontSize: 12),
+                    style: TextStyle(color: AppColors.muted, fontSize: 12),
                   ),
                 ),
             ],

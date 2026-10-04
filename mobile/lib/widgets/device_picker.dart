@@ -3,8 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../connect/connect_models.dart';
 import '../connect/connect_notifier.dart';
 import '../connect/connect_provider.dart';
+import '../app_colors.dart';
 
-const _muted = Color(0xFF71717A);
+Color get _muted => AppColors.muted;
 
 /// This device first, then whichever is playing, then the rest online, then the ones that are gone.
 List<DeviceInfo> sortDevices(List<DeviceInfo> devices, String thisId) {
@@ -55,7 +56,7 @@ class DevicePickerButton extends ConsumerWidget {
       tooltip: 'Connect to a device',
       onPressed: () => showModalBottomSheet<void>(
         context: context,
-        backgroundColor: const Color(0xFF18181B),
+        backgroundColor: AppColors.background,
         showDragHandle: true,
         builder: (_) => const DevicePickerSheet(),
       ),
@@ -80,8 +81,8 @@ class DevicePickerSheet extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Text(
                 'CONNECT TO A DEVICE',
                 style: TextStyle(
@@ -98,7 +99,7 @@ class DevicePickerSheet extends ConsumerWidget {
                   s.status == ConnectStatus.connecting
                       ? 'Connecting…'
                       : 'Not connected — trying again',
-                  style: const TextStyle(color: Colors.amber, fontSize: 12),
+                  style: TextStyle(color: AppColors.warning, fontSize: 12),
                 ),
               ),
             for (final d in list) _DeviceTile(device: d, state: s),
@@ -106,8 +107,8 @@ class DevicePickerSheet extends ConsumerWidget {
             if (s.remoteActive && (s.activeDevice?.online ?? false))
               _RemoteVolume(state: s),
             if (s.status == ConnectStatus.online && others.isEmpty)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                 child: Text(
                   'Open RiffPlayer on another device to see it here.',
                   style: TextStyle(color: _muted, fontSize: 12),
@@ -173,16 +174,16 @@ class _DeviceTile extends ConsumerWidget {
       title: Text(
         device.name,
         style: TextStyle(
-            color: playing ? accent : Colors.white,
+            color: playing ? accent : AppColors.text,
             fontWeight: playing ? FontWeight.w600 : null),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(deviceSubtitle(device, state.deviceId),
-          style: const TextStyle(color: _muted, fontSize: 12)),
+          style: TextStyle(color: _muted, fontSize: 12)),
       trailing: isThis && !device.active && state.remoteActive
-          ? const Text('Play here',
-              style: TextStyle(color: Colors.white70, fontSize: 12))
+          ? Text('Play here',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12))
           : null,
       onTap: disabled
           ? null
@@ -219,7 +220,7 @@ class RemoteLabel extends ConsumerWidget {
     final label = remoteLabel(ref.watch(connectProvider));
     if (label == null) return const SizedBox.shrink();
     final color = label.unreachable
-        ? Colors.amber
+        ? AppColors.warning
         : Theme.of(context).colorScheme.primary;
     return Padding(
       padding: const EdgeInsets.only(top: 4),
@@ -231,14 +232,14 @@ class RemoteLabel extends ConsumerWidget {
         children: [
           Text(label.text, style: TextStyle(color: color, fontSize: 12)),
           if (label.unreachable) ...[
-            const Text(' · ',
-                style: TextStyle(color: Colors.amber, fontSize: 12)),
+            Text(' · ',
+                style: TextStyle(color: AppColors.warning, fontSize: 12)),
             GestureDetector(
               onTap: () => ref.read(connectProvider.notifier).transferHere(),
-              child: const Text(
+              child: Text(
                 'Continue here',
                 style: TextStyle(
-                    color: Colors.amber,
+                    color: AppColors.warning,
                     fontSize: 12,
                     decoration: TextDecoration.underline),
               ),
@@ -291,7 +292,7 @@ class _DeviceNameSectionState extends ConsumerState<DeviceNameSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'THIS DEVICE',
           style: TextStyle(
               color: _muted,
@@ -300,7 +301,7 @@ class _DeviceNameSectionState extends ConsumerState<DeviceNameSection> {
               letterSpacing: 1.2),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'The name your other devices show in the device picker, so you can send music here or control it from them.',
           style: TextStyle(color: _muted, fontSize: 12),
         ),
@@ -331,8 +332,8 @@ class _DeviceNameSectionState extends ConsumerState<DeviceNameSection> {
           ],
         ),
         if (_saved)
-          const Padding(
-            padding: EdgeInsets.only(top: 4),
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
             child: Text('Saved', style: TextStyle(color: _muted, fontSize: 12)),
           ),
       ],

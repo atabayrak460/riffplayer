@@ -6,6 +6,7 @@ import '../providers/providers.dart';
 import '../api/types.dart';
 import '../widgets/download_tile.dart';
 import '../widgets/stock_covers.dart' as stock;
+import '../app_colors.dart';
 
 class DownloadsScreen extends ConsumerWidget {
   const DownloadsScreen({super.key});
@@ -22,13 +23,13 @@ class DownloadsScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (downloads) => downloads.isEmpty && downloadedPlaylists.isEmpty
-            ? const Center(
+            ? Center(
                 child: Padding(
-                  padding: EdgeInsets.all(32),
+                  padding: const EdgeInsets.all(32),
                   child: Text(
                     'No downloaded tracks.\nTap "⋯" on a song and select "Download".',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Color(0xFF71717A)),
+                    style: TextStyle(color: AppColors.muted),
                   ),
                 ),
               )
@@ -39,9 +40,9 @@ class DownloadsScreen extends ConsumerWidget {
                     ...downloadedPlaylists.map(
                       (pl) => _DownloadedPlaylistRow(playlist: pl),
                     ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: Divider(color: Color(0xFF27272A), height: 1),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Divider(color: AppColors.surface, height: 1),
                     ),
                   ],
                   if (downloads.isNotEmpty) ...[
@@ -57,8 +58,8 @@ class DownloadsScreen extends ConsumerWidget {
                           const SizedBox(width: 12),
                           Text(
                             '${downloads.length} track${downloads.length == 1 ? '' : 's'} available offline',
-                            style: const TextStyle(
-                                color: Color(0xFF71717A), fontSize: 13),
+                            style:
+                                TextStyle(color: AppColors.muted, fontSize: 13),
                           ),
                         ],
                       ),
@@ -108,8 +109,8 @@ class _SectionHeader extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
         child: Text(
           title.toUpperCase(),
-          style: const TextStyle(
-            color: Color(0xFF71717A),
+          style: TextStyle(
+            color: AppColors.muted,
             fontSize: 11,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.2,
@@ -129,15 +130,15 @@ class _DownloadedPlaylistRow extends StatelessWidget {
         leading: _PlaylistCoverThumb(playlist: playlist),
         title: Text(
           playlist.name,
-          style: const TextStyle(color: Colors.white, fontSize: 14),
+          style: TextStyle(color: AppColors.text, fontSize: 14),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
           '${playlist.trackCount} track${playlist.trackCount == 1 ? '' : 's'}',
-          style: const TextStyle(color: Color(0xFF71717A), fontSize: 12),
+          style: TextStyle(color: AppColors.muted, fontSize: 12),
         ),
-        trailing: const Icon(Icons.chevron_right, color: Color(0xFF52525B)),
+        trailing: Icon(Icons.chevron_right, color: AppColors.border),
       );
 }
 
@@ -149,7 +150,7 @@ class _PlaylistCoverThumb extends StatelessWidget {
   Widget build(BuildContext context) {
     final path = playlist.coverLocalPath;
     if (path == null || !File(path).existsSync()) {
-      return const Icon(Icons.queue_music, color: Color(0xFF71717A));
+      return Icon(Icons.queue_music, color: AppColors.muted);
     }
     return ClipRRect(
       borderRadius: BorderRadius.circular(6),

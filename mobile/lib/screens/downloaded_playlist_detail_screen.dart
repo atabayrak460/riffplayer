@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../api/types.dart';
 import '../providers/providers.dart';
 import '../widgets/download_tile.dart';
+import '../app_colors.dart';
 
 /// Offline-only detail view for a playlist downloaded as a unit (see
 /// [DownloadService.downloadPlaylist]) — reached from the Downloads screen's
@@ -35,9 +36,9 @@ class DownloadedPlaylistDetailScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (playlist) {
           if (playlist == null) {
-            return const Center(
+            return Center(
               child: Text('This downloaded playlist is gone.',
-                  style: TextStyle(color: Color(0xFF71717A))),
+                  style: TextStyle(color: AppColors.muted)),
             );
           }
           final tracks = tracksAsync.valueOrNull ?? [];
@@ -50,8 +51,8 @@ class DownloadedPlaylistDetailScreen extends ConsumerWidget {
               Text(
                 playlist.name,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                    color: Colors.white,
+                style: TextStyle(
+                    color: AppColors.text,
                     fontSize: 20,
                     fontWeight: FontWeight.bold),
               ),
@@ -60,15 +61,15 @@ class DownloadedPlaylistDetailScreen extends ConsumerWidget {
                 Text(
                   playlist.comment!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      color: Color(0xFFA1A1AA), fontSize: 13, height: 1.4),
+                  style: TextStyle(
+                      color: AppColors.mutedLight, fontSize: 13, height: 1.4),
                 ),
               ],
               const SizedBox(height: 8),
               Text(
                 '${tracks.length} track${tracks.length == 1 ? '' : 's'} available offline',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFF71717A), fontSize: 12),
+                style: TextStyle(color: AppColors.muted, fontSize: 12),
               ),
               if (tracks.isNotEmpty) ...[
                 const SizedBox(height: 16),
@@ -134,7 +135,7 @@ class DownloadedPlaylistDetailScreen extends ConsumerWidget {
               child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text('Delete', style: TextStyle(color: AppColors.danger)),
           ),
         ],
       ),
@@ -164,9 +165,8 @@ class _PlaylistCover extends StatelessWidget {
         child: Container(
           width: 160,
           height: 160,
-          color: const Color(0xFF27272A),
-          child:
-              const Icon(Icons.queue_music, color: Color(0xFF52525B), size: 56),
+          color: AppColors.surface,
+          child: Icon(Icons.queue_music, color: AppColors.border, size: 56),
         ),
       );
     }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/providers.dart';
 import '../cover_art.dart';
+import '../../app_colors.dart';
 
 /// Mirrors web's NowPlayingPanel UpNextSection — shows the very next queued
 /// track, tap to skip to it. Player screen equivalent of #68.
@@ -27,12 +28,12 @@ class UpNextSection extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: Text(
               'UP NEXT',
               style: TextStyle(
-                color: Color(0xFF71717A),
+                color: AppColors.muted,
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1.1,
@@ -50,17 +51,17 @@ class UpNextSection extends ConsumerWidget {
             ),
             title: Text(
               upNext.title,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
+              style: TextStyle(color: AppColors.text, fontSize: 14),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             subtitle: Text(
               upNext.artist,
-              style: const TextStyle(color: Color(0xFF71717A), fontSize: 12),
+              style: TextStyle(color: AppColors.muted, fontSize: 12),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            trailing: const Icon(Icons.skip_next, color: Color(0xFF71717A)),
+            trailing: Icon(Icons.skip_next, color: AppColors.muted),
           ),
         ],
       ),

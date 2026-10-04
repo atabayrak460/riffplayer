@@ -1,12 +1,15 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../app_colors.dart';
 
 class CoverArt extends StatelessWidget {
   final String? url;
+
   /// Fixed square size in logical pixels. Leave null to fill whatever space
   /// the parent gives it (e.g. inside a grid cell's `Expanded`).
   final double? size;
   final BorderRadius? borderRadius;
+
   /// Shown instead of the generic placeholder when [url] is null or fails to
   /// load — e.g. a branded stock cover for a system view or playlist.
   final Widget? fallback;
@@ -46,11 +49,11 @@ class CoverArt extends StatelessWidget {
   Widget _placeholderBox() => Container(
         width: size,
         height: size,
-        color: const Color(0xFF27272A),
+        color: AppColors.surface,
         child: Icon(
           Icons.music_note,
           size: (size ?? 48) * 0.4,
-          color: const Color(0xFF52525B),
+          color: AppColors.border,
         ),
       );
 }

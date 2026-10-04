@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/types.dart';
 import '../providers/providers.dart';
 import 'cover_art.dart';
+import '../app_colors.dart';
 
 class HomeTrackCard extends ConsumerWidget {
   final Song song;
@@ -14,17 +15,21 @@ class HomeTrackCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Scoped via .select() — otherwise every visible card rebuilds on every
     // position tick during playback, not just the currently-playing one.
-    final currentSongId = ref.watch(playerProvider.select((s) => s.currentSong?.id));
+    final currentSongId =
+        ref.watch(playerProvider.select((s) => s.currentSong?.id));
     final isCurrent = currentSongId == song.id;
     final client = ref.read(apiClientProvider);
-    final coverUrl =
-        song.coverArt != null ? client?.coverArtUrl(song.coverArt!, size: 300) : null;
+    final coverUrl = song.coverArt != null
+        ? client?.coverArtUrl(song.coverArt!, size: 300)
+        : null;
 
     return GestureDetector(
       onTap: () {
         final downloads = ref.read(downloadServiceProvider);
         if (client == null) return;
-        ref.read(playerProvider.notifier).playSong(song, client, downloads, queue: queue);
+        ref
+            .read(playerProvider.notifier)
+            .playSong(song, client, downloads, queue: queue);
       },
       child: SizedBox(
         width: 140,
@@ -45,7 +50,9 @@ class HomeTrackCard extends ConsumerWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: isCurrent ? Theme.of(context).colorScheme.primary : Colors.white,
+                color: isCurrent
+                    ? Theme.of(context).colorScheme.primary
+                    : AppColors.text,
                 fontWeight: FontWeight.w500,
                 fontSize: 13,
               ),
@@ -54,7 +61,7 @@ class HomeTrackCard extends ConsumerWidget {
               song.artist,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Color(0xFF71717A), fontSize: 12),
+              style: TextStyle(color: AppColors.muted, fontSize: 12),
             ),
           ],
         ),

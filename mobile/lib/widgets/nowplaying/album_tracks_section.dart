@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../api/types.dart';
 import '../../providers/providers.dart';
 import '../song_tile.dart';
+import '../../app_colors.dart';
 
 /// Mirrors web's NowPlayingPanel AlbumTracksSection — other tracks from the
 /// current song's album. Player screen equivalent of #68.
@@ -23,12 +24,12 @@ class AlbumTracksSection extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(12, 12, 12, 4),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
               child: Text(
                 'MORE FROM THIS ALBUM',
                 style: TextStyle(
-                  color: Color(0xFF71717A),
+                  color: AppColors.muted,
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1.1,

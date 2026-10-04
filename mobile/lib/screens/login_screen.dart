@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../api/types.dart';
 import '../providers/providers.dart';
+import '../app_colors.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -29,7 +30,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _submit() async {
     if (!_form.currentState!.validate()) return;
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       await ref.read(authProvider.notifier).login(
             Credentials(
@@ -67,10 +71,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       'Self-hosted music',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Color(0xFF71717A), fontSize: 15),
+                      style: TextStyle(color: AppColors.muted, fontSize: 15),
                     ),
                     const SizedBox(height: 40),
                     TextFormField(
@@ -106,12 +110,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.1),
+                          color: AppColors.danger.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           _error!,
-                          style: const TextStyle(color: Colors.red, fontSize: 13),
+                          style:
+                              TextStyle(color: AppColors.danger, fontSize: 13),
                         ),
                       ),
                     ],
@@ -119,12 +124,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ElevatedButton(
                       onPressed: _loading ? null : _submit,
                       child: _loading
-                          ? const SizedBox(
+                          ? SizedBox(
                               height: 20,
                               width: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white,
+                                color: AppColors.onBrand,
                               ),
                             )
                           : const Text('Sign in'),

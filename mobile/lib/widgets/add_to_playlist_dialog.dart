@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
+import '../app_colors.dart';
 
 class AddToPlaylistDialog extends ConsumerWidget {
   final String songId;
@@ -47,10 +48,10 @@ class AddToPlaylistDialog extends ConsumerWidget {
               ),
               error: (e, _) => Text('Error: $e'),
               data: (playlists) => playlists.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Text('No playlists yet',
-                          style: TextStyle(color: Color(0xFF71717A))),
+                          style: TextStyle(color: AppColors.muted)),
                     )
                   : ListView.builder(
                       shrinkWrap: true,

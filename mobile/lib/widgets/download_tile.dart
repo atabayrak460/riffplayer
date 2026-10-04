@@ -7,6 +7,7 @@ import '../api/types.dart';
 import '../providers/providers.dart';
 import '../utils/snackbar.dart';
 import 'add_to_playlist_dialog.dart';
+import '../app_colors.dart';
 
 String fmtDownloadSize(int? bytes) {
   if (bytes == null) return '';
@@ -68,8 +69,9 @@ class DownloadTile extends ConsumerWidget {
       title: Text(
         track.title,
         style: TextStyle(
-          color:
-              isCurrent ? Theme.of(context).colorScheme.primary : Colors.white,
+          color: isCurrent
+              ? Theme.of(context).colorScheme.primary
+              : AppColors.text,
           fontWeight: isCurrent ? FontWeight.w600 : FontWeight.normal,
           fontSize: 14,
         ),
@@ -78,7 +80,7 @@ class DownloadTile extends ConsumerWidget {
       ),
       subtitle: Text(
         '${track.artist} · ${fmtDownloadSize(track.fileSize)}',
-        style: const TextStyle(color: Color(0xFF71717A), fontSize: 12),
+        style: TextStyle(color: AppColors.muted, fontSize: 12),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -89,8 +91,7 @@ class DownloadTile extends ConsumerWidget {
             const SizedBox(width: 8),
           ],
           PopupMenuButton<String>(
-            icon:
-                const Icon(Icons.more_vert, color: Color(0xFF71717A), size: 18),
+            icon: Icon(Icons.more_vert, color: AppColors.muted, size: 18),
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'queue', child: Text('Add to queue')),
               PopupMenuItem(value: 'playlist', child: Text('Add to playlist')),
@@ -125,7 +126,7 @@ class DownloadTile extends ConsumerWidget {
                 SlidableAction(
                   onPressed: (_) => _addToQueue(context, ref),
                   backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onBrand,
                   icon: Icons.queue_music,
                   label: 'Queue',
                 ),
@@ -163,7 +164,7 @@ class DownloadTile extends ConsumerWidget {
               child: const Text('Cancel')),
           TextButton(
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Delete', style: TextStyle(color: Colors.red))),
+              child: Text('Delete', style: TextStyle(color: AppColors.danger))),
         ],
       ),
     );
@@ -196,7 +197,7 @@ class _DownloadCover extends StatelessWidget {
   Widget build(BuildContext context) {
     final path = track.coverLocalPath;
     if (path == null || !File(path).existsSync()) {
-      return const Icon(Icons.music_note, color: Color(0xFF71717A));
+      return Icon(Icons.music_note, color: AppColors.muted);
     }
     return ClipRRect(
       borderRadius: BorderRadius.circular(6),

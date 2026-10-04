@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/providers.dart';
 import '../widgets/song_tile.dart';
+import '../app_colors.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
@@ -16,7 +17,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   String _submitted = '';
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +31,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         title: TextField(
           controller: _ctrl,
           autofocus: false,
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(color: AppColors.text),
           decoration: const InputDecoration(
             hintText: 'Artists, albums, songs…',
             border: InputBorder.none,
@@ -49,9 +53,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ],
       ),
       body: _submitted.isEmpty
-          ? const Center(
+          ? Center(
               child: Text('Search for music',
-                  style: TextStyle(color: Color(0xFF71717A))),
+                  style: TextStyle(color: AppColors.muted)),
             )
           : resultsAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -62,7 +66,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     results.songs.isEmpty) {
                   return Center(
                     child: Text('No results for "$_submitted"',
-                        style: const TextStyle(color: Color(0xFF71717A))),
+                        style: TextStyle(color: AppColors.muted)),
                   );
                 }
                 return ListView(
@@ -79,21 +83,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       const _SectionHeader('Artists'),
                       ...results.artists.map((a) => ListTile(
                             onTap: () => context.push('/artists/${a.id}'),
-                            leading: const Icon(Icons.person, color: Color(0xFF71717A)),
+                            leading: Icon(Icons.person, color: AppColors.muted),
                             title: Text(a.name,
-                                style: const TextStyle(color: Colors.white)),
+                                style: TextStyle(color: AppColors.text)),
                           )),
                     ],
                     if (results.albums.isNotEmpty) ...[
                       const _SectionHeader('Albums'),
                       ...results.albums.map((a) => ListTile(
                             onTap: () => context.push('/albums/${a.id}'),
-                            leading: const Icon(Icons.album, color: Color(0xFF71717A)),
+                            leading: Icon(Icons.album, color: AppColors.muted),
                             title: Text(a.name,
-                                style: const TextStyle(color: Colors.white)),
+                                style: TextStyle(color: AppColors.text)),
                             subtitle: Text(a.artist,
-                                style: const TextStyle(
-                                    color: Color(0xFF71717A), fontSize: 12)),
+                                style: TextStyle(
+                                    color: AppColors.muted, fontSize: 12)),
                           )),
                     ],
                     const SizedBox(height: 80),
@@ -114,8 +118,8 @@ class _SectionHeader extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
         child: Text(
           title.toUpperCase(),
-          style: const TextStyle(
-            color: Color(0xFF71717A),
+          style: TextStyle(
+            color: AppColors.muted,
             fontSize: 11,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.2,

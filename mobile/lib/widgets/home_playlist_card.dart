@@ -5,6 +5,7 @@ import '../api/types.dart';
 import '../providers/providers.dart';
 import 'cover_art.dart';
 import 'stock_covers.dart' as stock;
+import '../app_colors.dart';
 
 class HomePlaylistCard extends ConsumerWidget {
   final Playlist playlist;
@@ -38,13 +39,16 @@ class HomePlaylistCard extends ConsumerWidget {
               playlist.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 13),
+              style: TextStyle(
+                  color: AppColors.text,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13),
             ),
             Text(
               '${playlist.songCount} tracks',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Color(0xFF71717A), fontSize: 12),
+              style: TextStyle(color: AppColors.muted, fontSize: 12),
             ),
           ],
         ),

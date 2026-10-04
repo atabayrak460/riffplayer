@@ -5,10 +5,21 @@ import '../api/types.dart';
 import '../providers/providers.dart';
 import '../widgets/cover_art.dart';
 import '../widgets/stock_covers.dart' as stock;
+import '../app_colors.dart';
 
 const _months = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
 ];
 
 class WrappedScreen extends ConsumerStatefulWidget {
@@ -42,7 +53,8 @@ class _WrappedScreenState extends ConsumerState<WrappedScreen> {
       if (mounted) setState(() => _summary = summary);
     } catch (e) {
       if (mounted) {
-        setState(() => _summaryError = e.toString().replaceFirst('Exception: ', ''));
+        setState(
+            () => _summaryError = e.toString().replaceFirst('Exception: ', ''));
       }
     } finally {
       if (mounted) setState(() => _generatingSummary = false);
@@ -64,7 +76,7 @@ class _WrappedScreenState extends ConsumerState<WrappedScreen> {
               child: DropdownButton<int>(
                 value: _year,
                 underline: const SizedBox(),
-                dropdownColor: const Color(0xFF27272A),
+                dropdownColor: AppColors.surface,
                 items: years
                     .map((y) => DropdownMenuItem(value: y, child: Text('$y')))
                     .toList(),
@@ -86,23 +98,27 @@ class _WrappedScreenState extends ConsumerState<WrappedScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
           child: Text('No play history found for $_year.',
-              style: const TextStyle(color: Color(0xFF71717A))),
+              style: TextStyle(color: AppColors.muted)),
         ),
         data: (stats) {
           if (stats.totalPlays == 0) {
             return Center(
               child: Text('No plays recorded for $_year yet.',
-                  style: const TextStyle(color: Color(0xFF71717A))),
+                  style: TextStyle(color: AppColors.muted)),
             );
           }
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Center(child: stock.WrappedCover(size: 96, borderRadius: BorderRadius.circular(14))),
+              Center(
+                  child: stock.WrappedCover(
+                      size: 96, borderRadius: BorderRadius.circular(14))),
               const SizedBox(height: 20),
               Row(
                 children: [
-                  Expanded(child: _StatCard(label: 'Total plays', value: '${stats.totalPlays}')),
+                  Expanded(
+                      child: _StatCard(
+                          label: 'Total plays', value: '${stats.totalPlays}')),
                   const SizedBox(width: 12),
                   Expanded(
                     child: _StatCard(
@@ -140,30 +156,35 @@ class _WrappedScreenState extends ConsumerState<WrappedScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF27272A),
+                    color: AppColors.surface,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Text(_summary!, style: const TextStyle(color: Colors.white, height: 1.5)),
+                  child: Text(_summary!,
+                      style: TextStyle(color: AppColors.text, height: 1.5)),
                 )
               else
                 Row(
                   children: [
                     ElevatedButton(
                       onPressed: _generatingSummary ? null : _generateSummary,
-                      child: Text(_generatingSummary ? 'Generating…' : 'Generate with Ollama'),
+                      child: Text(_generatingSummary
+                          ? 'Generating…'
+                          : 'Generate with Ollama'),
                     ),
                     const SizedBox(width: 10),
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         'Requires Ollama configured by your server admin.',
-                        style: TextStyle(color: Color(0xFF71717A), fontSize: 11.5),
+                        style:
+                            TextStyle(color: AppColors.muted, fontSize: 11.5),
                       ),
                     ),
                   ],
                 ),
               if (_summaryError != null) ...[
                 const SizedBox(height: 8),
-                Text(_summaryError!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                Text(_summaryError!,
+                    style: TextStyle(color: AppColors.danger, fontSize: 12)),
               ],
               if (stats.topTracks.length > 1) ...[
                 const SizedBox(height: 24),
@@ -188,8 +209,8 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
         text.toUpperCase(),
-        style: const TextStyle(
-          color: Color(0xFF71717A),
+        style: TextStyle(
+          color: AppColors.muted,
           fontSize: 12,
           fontWeight: FontWeight.w700,
           letterSpacing: 1.2,
@@ -207,19 +228,24 @@ class _StatCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFF27272A),
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(label.toUpperCase(),
-                style: const TextStyle(color: Color(0xFF71717A), fontSize: 11, letterSpacing: 1)),
+                style: TextStyle(
+                    color: AppColors.muted, fontSize: 11, letterSpacing: 1)),
             const SizedBox(height: 6),
             Text(value,
-                style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
+                style: TextStyle(
+                    color: AppColors.text,
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold)),
             if (sub != null)
-              Text(sub!, style: const TextStyle(color: Color(0xFF71717A), fontSize: 12)),
+              Text(sub!,
+                  style: TextStyle(color: AppColors.muted, fontSize: 12)),
           ],
         ),
       );
@@ -232,31 +258,37 @@ class _TopTrackCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final client = ref.read(apiClientProvider);
-    final coverUrl =
-        track.coverArt != null ? client?.coverArtUrl(track.coverArt!, size: 200) : null;
+    final coverUrl = track.coverArt != null
+        ? client?.coverArtUrl(track.coverArt!, size: 200)
+        : null;
     return GestureDetector(
       onTap: () => context.push('/albums/${track.albumId}'),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFF27272A),
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
-            CoverArt(url: coverUrl, size: 56, borderRadius: BorderRadius.circular(8)),
+            CoverArt(
+                url: coverUrl,
+                size: 56,
+                borderRadius: BorderRadius.circular(8)),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(track.title,
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                      style: TextStyle(
+                          color: AppColors.text,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15)),
                   Text(track.artist,
-                      style: const TextStyle(color: Color(0xFF71717A), fontSize: 13)),
+                      style: TextStyle(color: AppColors.muted, fontSize: 13)),
                   Text('${track.playCount} plays',
-                      style: const TextStyle(color: Color(0xFF71717A), fontSize: 11)),
+                      style: TextStyle(color: AppColors.muted, fontSize: 11)),
                 ],
               ),
             ),
@@ -275,8 +307,9 @@ class _TopArtistRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final client = ref.read(apiClientProvider);
-    final coverUrl =
-        artist.coverArt != null ? client?.coverArtUrl(artist.coverArt!, size: 100) : null;
+    final coverUrl = artist.coverArt != null
+        ? client?.coverArtUrl(artist.coverArt!, size: 100)
+        : null;
     return GestureDetector(
       onTap: () => context.push('/artists/${artist.id}'),
       child: Padding(
@@ -287,17 +320,23 @@ class _TopArtistRow extends ConsumerWidget {
               width: 20,
               child: Text('$rank',
                   textAlign: TextAlign.right,
-                  style: const TextStyle(color: Color(0xFF71717A), fontSize: 13)),
+                  style: TextStyle(color: AppColors.muted, fontSize: 13)),
             ),
             const SizedBox(width: 10),
-            CoverArt(url: coverUrl, size: 36, borderRadius: BorderRadius.circular(18)),
+            CoverArt(
+                url: coverUrl,
+                size: 36,
+                borderRadius: BorderRadius.circular(18)),
             const SizedBox(width: 10),
             Expanded(
               child: Text(artist.name,
-                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+                  style: TextStyle(
+                      color: AppColors.text,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500)),
             ),
             Text('${artist.playCount} plays',
-                style: const TextStyle(color: Color(0xFF71717A), fontSize: 12)),
+                style: TextStyle(color: AppColors.muted, fontSize: 12)),
           ],
         ),
       ),
@@ -321,7 +360,7 @@ class _TopTrackRow extends StatelessWidget {
                 width: 20,
                 child: Text('$rank',
                     textAlign: TextAlign.right,
-                    style: const TextStyle(color: Color(0xFF71717A), fontSize: 13)),
+                    style: TextStyle(color: AppColors.muted, fontSize: 13)),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -331,17 +370,19 @@ class _TopTrackRow extends StatelessWidget {
                     Text(track.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w500)),
+                        style: TextStyle(
+                            color: AppColors.text,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w500)),
                     Text('${track.artist} · ${track.album}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Color(0xFF71717A), fontSize: 12)),
+                        style: TextStyle(color: AppColors.muted, fontSize: 12)),
                   ],
                 ),
               ),
               Text('${track.playCount} plays',
-                  style: const TextStyle(color: Color(0xFF71717A), fontSize: 11.5)),
+                  style: TextStyle(color: AppColors.muted, fontSize: 11.5)),
             ],
           ),
         ),
@@ -354,7 +395,8 @@ class _MonthChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxPlays = byMonth.map((m) => m.plays).fold(1, (a, b) => a > b ? a : b);
+    final maxPlays =
+        byMonth.map((m) => m.plays).fold(1, (a, b) => a > b ? a : b);
     return SizedBox(
       height: 110,
       child: Row(
@@ -370,15 +412,20 @@ class _MonthChart extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   Container(
-                    height: (heightFrac * 80).clamp(plays > 0 ? 4 : 0, 80).toDouble(),
+                    height: (heightFrac * 80)
+                        .clamp(plays > 0 ? 4 : 0, 80)
+                        .toDouble(),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.7),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(_months[i][0],
-                      style: const TextStyle(color: Color(0xFF52525B), fontSize: 10)),
+                      style: TextStyle(color: AppColors.border, fontSize: 10)),
                 ],
               ),
             ),

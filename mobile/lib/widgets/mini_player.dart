@@ -7,6 +7,7 @@ import '../providers/providers.dart';
 import '../connect/connect_provider.dart';
 import 'device_picker.dart';
 import 'cover_art.dart';
+import '../app_colors.dart';
 
 // Swipe-left/right thresholds for skipping tracks — a swipe past either one
 // (distance OR flick velocity) fires; short/slow drags snap back to 0. Kept
@@ -14,6 +15,8 @@ import 'cover_art.dart';
 // have to fully commit to.
 const _swipeDistanceThreshold = 45.0;
 const _swipeVelocityThreshold = 250.0;
+// Upward flick speed (px/s) that opens the full player.
+const _openPlayerVelocity = 300.0;
 
 class MiniPlayer extends ConsumerStatefulWidget {
   const MiniPlayer({super.key});
@@ -116,16 +119,23 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
       onHorizontalDragStart: _onDragStart,
       onHorizontalDragUpdate: _onDragUpdate,
       onHorizontalDragEnd: _onDragEnd,
+      // Flick the bar upward to open the full player (the same motion that
+      // pulls the player back down closes it).
+      onVerticalDragEnd: (d) {
+        if (d.velocity.pixelsPerSecond.dy <= -_openPlayerVelocity) {
+          context.push('/player');
+        }
+      },
       behavior: HitTestBehavior.opaque,
       child: Container(
-        color: const Color(0xFF27272A),
+        color: AppColors.surface,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // Progress bar
             LinearProgressIndicator(
               value: progress.clamp(0.0, 1.0),
-              backgroundColor: const Color(0xFF3F3F46),
+              backgroundColor: AppColors.surface2,
               valueColor: AlwaysStoppedAnimation(
                 Theme.of(context).colorScheme.primary,
               ),
@@ -181,14 +191,14 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.skip_previous, color: Colors.white),
+                    icon: Icon(Icons.skip_previous, color: AppColors.text),
                     onPressed: () =>
                         ref.read(playerProvider.notifier).previous(),
                   ),
                   IconButton(
                     icon: Icon(
                       playing ? Icons.pause : Icons.play_arrow,
-                      color: Colors.white,
+                      color: AppColors.text,
                       size: 28,
                     ),
                     onPressed: () {
@@ -197,7 +207,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                     },
                   ),
                   IconButton(
-                    icon: const Icon(Icons.skip_next, color: Colors.white),
+                    icon: Icon(Icons.skip_next, color: AppColors.text),
                     onPressed: () => ref.read(playerProvider.notifier).next(),
                   ),
                 ],
@@ -220,7 +230,8 @@ class _MiniSongInfo extends StatelessWidget {
   /// "Playing on <device>" while another device is the one playing.
   final String? remoteText;
 
-  const _MiniSongInfo({required this.song, required this.client, this.remoteText});
+  const _MiniSongInfo(
+      {required this.song, required this.client, this.remoteText});
 
   @override
   Widget build(BuildContext context) {
@@ -244,8 +255,8 @@ class _MiniSongInfo extends StatelessWidget {
             children: [
               Text(
                 song.title,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: AppColors.text,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),
@@ -253,9 +264,11 @@ class _MiniSongInfo extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               Text(
-                remoteText == null ? song.artist : '${song.artist} · $remoteText',
-                style: const TextStyle(
-                  color: Color(0xFF71717A),
+                remoteText == null
+                    ? song.artist
+                    : '${song.artist} · $remoteText',
+                style: TextStyle(
+                  color: AppColors.muted,
                   fontSize: 12,
                 ),
                 maxLines: 1,

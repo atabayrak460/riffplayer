@@ -4,6 +4,7 @@ import '../providers/providers.dart';
 import '../utils/snackbar.dart';
 import '../widgets/song_tile.dart';
 import '../widgets/stock_covers.dart' as stock;
+import '../app_colors.dart';
 
 class FavoritesScreen extends ConsumerWidget {
   const FavoritesScreen({super.key});
@@ -18,19 +19,22 @@ class FavoritesScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (data) {
-          if (data.artists.isEmpty && data.albums.isEmpty && data.songs.isEmpty) {
-            return const Center(
+          if (data.artists.isEmpty &&
+              data.albums.isEmpty &&
+              data.songs.isEmpty) {
+            return Center(
               child: Padding(
-                padding: EdgeInsets.all(32),
+                padding: const EdgeInsets.all(32),
                 child: Text(
                   'Nothing starred yet.\nTap ☆ on a song, album or artist.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Color(0xFF71717A)),
+                  style: TextStyle(color: AppColors.muted),
                 ),
               ),
             );
           }
-          final total = data.songs.length + data.albums.length + data.artists.length;
+          final total =
+              data.songs.length + data.albums.length + data.artists.length;
           return ListView(
             children: [
               Padding(
@@ -44,7 +48,7 @@ class FavoritesScreen extends ConsumerWidget {
                     const SizedBox(width: 14),
                     Text(
                       '$total starred item${total == 1 ? '' : 's'}',
-                      style: const TextStyle(color: Color(0xFF71717A), fontSize: 13),
+                      style: TextStyle(color: AppColors.muted, fontSize: 13),
                     ),
                   ],
                 ),
@@ -60,20 +64,22 @@ class FavoritesScreen extends ConsumerWidget {
               if (data.albums.isNotEmpty) ...[
                 const _SectionHeader('Albums'),
                 ...data.albums.map((a) => ListTile(
-                      leading: const Icon(Icons.album, color: Color(0xFF71717A)),
-                      title: Text(a.name,
-                          style: const TextStyle(color: Colors.white)),
+                      leading: Icon(Icons.album, color: AppColors.muted),
+                      title:
+                          Text(a.name, style: TextStyle(color: AppColors.text)),
                       subtitle: Text(a.artist,
-                          style: const TextStyle(
-                              color: Color(0xFF71717A), fontSize: 12)),
+                          style:
+                              TextStyle(color: AppColors.muted, fontSize: 12)),
                       trailing: IconButton(
-                        icon: const Icon(Icons.star, color: Color(0xFFA78BFA)),
+                        icon: Icon(Icons.star, color: AppColors.brand),
                         onPressed: () => ref
                             .read(apiClientProvider)
                             ?.unstar(albumId: a.id)
                             .then((_) => ref.invalidate(starredProvider))
-                            // ignore: use_build_context_synchronously
-                            .catchError((_) => showFailureSnackBar(context, 'Failed to unstar'))
+                            .catchError((_) => showFailureSnackBar(
+                                // ignore: use_build_context_synchronously
+                                context,
+                                'Failed to unstar'))
                             .ignore(),
                       ),
                     )),
@@ -81,9 +87,9 @@ class FavoritesScreen extends ConsumerWidget {
               if (data.artists.isNotEmpty) ...[
                 const _SectionHeader('Artists'),
                 ...data.artists.map((a) => ListTile(
-                      leading: const Icon(Icons.person, color: Color(0xFF71717A)),
-                      title: Text(a.name,
-                          style: const TextStyle(color: Colors.white)),
+                      leading: Icon(Icons.person, color: AppColors.muted),
+                      title:
+                          Text(a.name, style: TextStyle(color: AppColors.text)),
                     )),
               ],
               const SizedBox(height: 80),
@@ -104,8 +110,8 @@ class _SectionHeader extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
         child: Text(
           title.toUpperCase(),
-          style: const TextStyle(
-            color: Color(0xFF71717A),
+          style: TextStyle(
+            color: AppColors.muted,
             fontSize: 11,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.2,

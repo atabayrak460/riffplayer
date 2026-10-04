@@ -9,6 +9,7 @@ import '../widgets/home_playlist_card.dart';
 import '../widgets/home_row.dart';
 import '../widgets/home_track_card.dart';
 import '../widgets/stock_covers.dart' as stock;
+import '../app_colors.dart';
 
 /// The app's landing tab — a dashboard of listening-history-driven sections,
 /// distinct from the full Albums library grid (still reachable via each
@@ -55,28 +56,31 @@ class _WrappedPreviewCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFF27272A),
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
           children: [
-            stock.WrappedCover(size: 52, borderRadius: BorderRadius.circular(10)),
+            stock.WrappedCover(
+                size: 52, borderRadius: BorderRadius.circular(10)),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('$year Wrapped',
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                  const Text(
+                      style: TextStyle(
+                          color: AppColors.text,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16)),
+                  Text(
                     'Your year in music, so far.',
-                    style: TextStyle(color: Color(0xFF71717A), fontSize: 12.5),
+                    style: TextStyle(color: AppColors.muted, fontSize: 12.5),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, color: Color(0xFF71717A)),
+            Icon(Icons.chevron_right, color: AppColors.muted),
           ],
         ),
       ),
@@ -94,18 +98,22 @@ class _ContinueListeningSection extends ConsumerWidget {
     final lastPlayed = lastPlayedAsync.valueOrNull;
     final recentAlbums = recentAlbumsAsync.valueOrNull ?? [];
 
-    if (lastPlayed == null && recentAlbums.isEmpty) return const SizedBox.shrink();
+    if (lastPlayed == null && recentAlbums.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Continue Listening',
-          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+          style: TextStyle(
+              color: AppColors.text, fontSize: 20, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
         if (lastPlayed != null) _ResumeCard(song: lastPlayed),
-        if (lastPlayed != null && recentAlbums.isNotEmpty) const SizedBox(height: 20),
+        if (lastPlayed != null && recentAlbums.isNotEmpty)
+          const SizedBox(height: 20),
         if (recentAlbums.isNotEmpty)
           HomeRow(
             title: 'Recently added',
@@ -127,8 +135,9 @@ class _ResumeCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final client = ref.read(apiClientProvider);
-    final coverUrl =
-        song.coverArt != null ? client?.coverArtUrl(song.coverArt!, size: 160) : null;
+    final coverUrl = song.coverArt != null
+        ? client?.coverArtUrl(song.coverArt!, size: 160)
+        : null;
 
     return GestureDetector(
       onTap: () async {
@@ -147,21 +156,24 @@ class _ResumeCard extends ConsumerWidget {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: const Color(0xFF27272A),
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
-            CoverArt(url: coverUrl, size: 56, borderRadius: BorderRadius.circular(6)),
+            CoverArt(
+                url: coverUrl,
+                size: 56,
+                borderRadius: BorderRadius.circular(6)),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'JUMP BACK IN',
                     style: TextStyle(
-                      color: Color(0xFF71717A),
+                      color: AppColors.muted,
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 1.2,
@@ -172,19 +184,22 @@ class _ResumeCard extends ConsumerWidget {
                     song.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+                    style: TextStyle(
+                        color: AppColors.text,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14),
                   ),
                   Text(
                     '${song.artist} · ${song.album}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Color(0xFF71717A), fontSize: 12),
+                    style: TextStyle(color: AppColors.muted, fontSize: 12),
                   ),
                 ],
               ),
             ),
-            Icon(Icons.play_circle_fill, color: Theme.of(context).colorScheme.primary, size: 36),
+            Icon(Icons.play_circle_fill,
+                color: Theme.of(context).colorScheme.primary, size: 36),
           ],
         ),
       ),
@@ -208,23 +223,27 @@ class _MostPlayedSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Most Played',
-          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+          style: TextStyle(
+              color: AppColors.text, fontSize: 20, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
         if (topSongs.isNotEmpty)
           HomeRow(
             title: 'Your most played',
-            children:
-                topSongs.map((s) => HomeTrackCard(song: s, queue: topSongs)).toList(),
+            children: topSongs
+                .map((s) => HomeTrackCard(song: s, queue: topSongs))
+                .toList(),
           ),
-        if (topSongs.isNotEmpty && playlists.isNotEmpty) const SizedBox(height: 20),
+        if (topSongs.isNotEmpty && playlists.isNotEmpty)
+          const SizedBox(height: 20),
         if (playlists.isNotEmpty)
           HomeRow(
             title: 'Your playlists',
             viewAllTo: '/library',
-            children: playlists.map((p) => HomePlaylistCard(playlist: p)).toList(),
+            children:
+                playlists.map((p) => HomePlaylistCard(playlist: p)).toList(),
           ),
       ],
     );
@@ -243,19 +262,21 @@ class _RediscoverSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Rediscover',
-          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+          style: TextStyle(
+              color: AppColors.text, fontSize: 20, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'You might have forgotten these.',
-          style: TextStyle(color: Color(0xFF71717A), fontSize: 13),
+          style: TextStyle(color: AppColors.muted, fontSize: 13),
         ),
         const SizedBox(height: 16),
         HomeRow(
           title: 'From your library',
-          children: songs.map((s) => HomeTrackCard(song: s, queue: songs)).toList(),
+          children:
+              songs.map((s) => HomeTrackCard(song: s, queue: songs)).toList(),
         ),
       ],
     );
