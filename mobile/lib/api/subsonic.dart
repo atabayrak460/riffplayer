@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import '../utils/credits.dart';
 import 'dart:convert';
 import 'dart:math';
@@ -363,6 +364,55 @@ class SubsonicClient {
     );
     return response.data ?? {};
   }
+
+  // ── Song radio ──────────────────────────────────────────────────────────────
+
+  /// A batch of songs for an endless radio queue. [type] is song / artist /
+  /// album / playlist; [exclude] are ids already queued.
+  Future<List<Song>> getRadio(String type, String id,
+      {int count = 30, List<String> exclude = const []}) async {
+    final query = Uri(queryParameters: {
+      'type': type,
+      'id': id,
+      'count': '$count',
+      if (exclude.isNotEmpty) 'exclude': exclude.join(','),
+    }).query;
+    final r = await _apiCall('GET', 'radio?$query');
+    return [
+      for (final s in (r['songs'] as List<dynamic>? ?? const []))
+        Song.fromJson(s as Map<String, dynamic>),
+    ];
+  }
+
+  // ── Share pictures (rendered on the server) ─────────────────────────────────
+
+  Future<Uint8List> _apiImage(String path) async {
+    final response = await _dio.get<List<int>>(
+      '${credentials.serverUrl}/api/v1/$path',
+      options: Options(
+        responseType: ResponseType.bytes,
+        headers: {
+          if (credentials.token != null)
+            'Authorization': 'Bearer ${credentials.token}',
+        },
+      ),
+    );
+    return Uint8List.fromList(response.data ?? const []);
+  }
+
+  /// A picture of one song ("story" 9:16 or "post" 4:5), ready to share.
+  Future<Uint8List> getSongShareImage(String id, {String size = 'story'}) =>
+      _apiImage('share/song/${Uri.encodeComponent(id)}?size=$size');
+
+  Future<int> getPlaylistSharePages(String id) async {
+    final r = await _apiCall(
+        'GET', 'share/playlist/${Uri.encodeComponent(id)}/pages');
+    return (r['pages'] as num?)?.toInt() ?? 1;
+  }
+
+  /// Picture [page] (1-based) of a playlist.
+  Future<Uint8List> getPlaylistShareImage(String id, int page) =>
+      _apiImage('share/playlist/${Uri.encodeComponent(id)}/page/$page');
 
   Future<void> reorderPlaylistTracks(
           String playlistId, List<String> trackIds) =>

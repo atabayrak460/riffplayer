@@ -1,3 +1,5 @@
+import '../providers/radio_provider.dart';
+import '../utils/radio_actions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -77,6 +79,10 @@ class _ArtistDetailScreenState extends ConsumerState<ArtistDetailScreen> {
                               '${albums.length} ${albums.length == 1 ? 'album' : 'albums'}',
                               style: TextStyle(
                                   color: AppColors.muted, fontSize: 13),
+                            ),
+                            RadioButton(
+                              seed: RadioSeed('artist', artist.id, artist.name),
+                              label: 'Artist radio',
                             ),
                           ],
                         ),

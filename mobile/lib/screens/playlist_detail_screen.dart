@@ -1,3 +1,6 @@
+import '../providers/radio_provider.dart';
+import '../utils/radio_actions.dart';
+import '../utils/share_actions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -75,6 +78,11 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
           appBar: AppBar(
             title: Text(playlist.name),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.ios_share),
+                tooltip: 'Share as picture',
+                onPressed: () => sharePlaylistAsPicture(context, ref, playlist),
+              ),
               IconButton(
                 icon: const Icon(Icons.delete_outline),
                 onPressed: () => _confirmDelete(context, ref, playlist),
@@ -183,6 +191,11 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                     label: const Text('Play'),
                   ),
                   const SizedBox(width: 8),
+                  RadioButton(
+                    seed: RadioSeed('playlist', playlist.id, playlist.name),
+                    enabled: songs.isNotEmpty,
+                  ),
+                  const SizedBox(width: 4),
                   OutlinedButton.icon(
                     onPressed: songs.isEmpty || _downloading
                         ? null

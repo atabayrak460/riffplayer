@@ -11,6 +11,7 @@ import { scrobblePlugin } from './endpoints/scrobble.js';
 import { lyricsPlugin } from './endpoints/lyrics.js';
 import { scanPlugin } from './endpoints/scan.js';
 import { playQueuePlugin } from './endpoints/playQueue.js';
+import { radioPlugin } from './endpoints/radio.js';
 
 interface SubsonicQuery {
   f?: string;
@@ -40,6 +41,7 @@ export async function subsonicPlugin(app: FastifyInstance): Promise<void> {
     api.register(lyricsPlugin);
     api.register(scanPlugin);
     api.register(playQueuePlugin);
+    api.register(radioPlugin);
 
     // Catch-all for unrecognised endpoints — returns a proper Subsonic error
     // instead of a raw Fastify 404. Must be registered last in this scope.

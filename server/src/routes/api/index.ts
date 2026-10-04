@@ -14,6 +14,8 @@ import { librarySidebarPlugin } from './librarySidebar.js';
 import { systemViewsPlugin } from './systemViews.js';
 import { connectPlugin } from './connect.js';
 import { tracksPlugin } from './tracks.js';
+import { sharePlugin } from './share.js';
+import { radioPlugin } from './radio.js';
 
 // ── Plugin ────────────────────────────────────────────────────────────────────
 // Each area of the custom REST API lives in its own file (auth, me, admin/*,
@@ -60,6 +62,18 @@ export async function apiPlugin(app: FastifyInstance): Promise<void> {
     tr.addHook('preHandler', apiAuth);
     tr.register(tracksPlugin);
   }, { prefix: '/tracks' });
+
+  // Song radio — all require auth, registered under /radio
+  app.register(async (rd) => {
+    rd.addHook('preHandler', apiAuth);
+    rd.register(radioPlugin);
+  }, { prefix: '/radio' });
+
+  // Share pictures (song card, playlist pages), rendered on the server — all require auth, under /share/*
+  app.register(async (sh) => {
+    sh.addHook('preHandler', apiAuth);
+    sh.register(sharePlugin);
+  }, { prefix: '/share' });
 
   // Per-user system-view cover + description overrides — all require auth,
   // registered under /system-views/*

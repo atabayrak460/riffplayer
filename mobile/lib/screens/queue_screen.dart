@@ -1,3 +1,4 @@
+import '../providers/radio_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/types.dart';
@@ -41,6 +42,7 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(playerProvider);
     final notifier = ref.read(playerProvider.notifier);
+    final radio = ref.watch(radioProvider);
     final remoteActive =
         ref.watch(connectProvider.select((s) => s.remoteActive));
     final remoteQueue = ref.watch(connectProvider.select((s) => s.remoteQueue));
@@ -95,6 +97,25 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
                         style: TextStyle(
                             color: Theme.of(context).colorScheme.primary,
                             fontSize: 12)),
+                  ),
+                if (radio != null && !remoteActive)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                              'Radio · ${radio.name} — keeps adding similar songs',
+                              style: TextStyle(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontSize: 12)),
+                        ),
+                        TextButton(
+                          onPressed: ref.read(radioProvider.notifier).stop,
+                          child: const Text('Stop'),
+                        ),
+                      ],
+                    ),
                   ),
                 if (current != null) ...[
                   Padding(

@@ -1,3 +1,6 @@
+import '../providers/radio_provider.dart';
+import '../utils/radio_actions.dart';
+import '../utils/share_actions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
@@ -141,6 +144,9 @@ class SongTile extends ConsumerWidget {
               ),
               const PopupMenuItem(value: 'album', child: Text('Go to album')),
               const PopupMenuItem(value: 'artist', child: Text('Go to artist')),
+              const PopupMenuItem(value: 'radio', child: Text('Start radio')),
+              const PopupMenuItem(
+                  value: 'share', child: Text('Share as picture')),
               const PopupMenuItem(value: 'info', child: Text('Song info')),
               if (onRemove != null)
                 const PopupMenuItem(
@@ -257,6 +263,11 @@ class SongTile extends ConsumerWidget {
     final client = ref.read(apiClientProvider);
     if (client == null) return;
     switch (action) {
+      case 'radio':
+        startRadio(context, ref, RadioSeed('song', song.id, song.title),
+            firstSong: song);
+      case 'share':
+        shareSongAsPicture(context, ref, song);
       case 'queue':
         _addToQueue(context, ref);
       case 'playlist':

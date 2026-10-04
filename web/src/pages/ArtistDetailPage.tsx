@@ -1,3 +1,4 @@
+import { useRadioStore } from '../store/radio';
 import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -105,6 +106,12 @@ export function ArtistDetailPage() {
               className="bg-brand hover:bg-brand-dim text-on-brand text-sm font-medium px-5 py-2 rounded-full transition-colors"
             >
               Play all
+            </button>
+            <button
+              onClick={() => void useRadioStore.getState().start({ type: 'artist', id: artist.id, name: artist.name })}
+              className="text-zinc-400 hover:text-zinc-50 transition-colors text-sm"
+            >
+              Artist radio
             </button>
             <StarButton starred={!!artist.starred} opts={{ artistId: artist.id }} />
           </div>

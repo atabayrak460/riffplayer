@@ -43,6 +43,8 @@ COPY --from=server-build /app/server/dist    ./server/dist
 COPY --from=web-build    /app/web/dist       ./web/dist
 
 COPY server/migrations   ./server/migrations
+# Fonts + logo the share-image renderer draws with (server/src/share).
+COPY server/assets       ./server/assets
 COPY server/package.json ./server/
 COPY package.json        ./
 

@@ -39,7 +39,7 @@ export function getUserTopArtists(userId: number, limitDays = 90, count = 5): To
     .all(userId, since, count) as TopArtist[];
 }
 
-async function fetchSimilarArtistNames(
+export async function fetchSimilarArtistNames(
   artistName: string,
   apiKey: string,
 ): Promise<string[]> {

@@ -1,3 +1,5 @@
+import '../providers/radio_provider.dart';
+import '../utils/radio_actions.dart';
 import '../utils/quality.dart';
 import '../widgets/quality_badge.dart';
 import 'package:flutter/material.dart';
@@ -75,10 +77,17 @@ class AlbumDetailScreen extends ConsumerWidget {
                         QualityBadge(quality: albumQuality(songs)),
                       ],
                       const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: () => _playAll(ref, songs),
-                        icon: const Icon(Icons.play_arrow),
-                        label: const Text('Play all'),
+                      Row(
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: () => _playAll(ref, songs),
+                            icon: const Icon(Icons.play_arrow),
+                            label: const Text('Play all'),
+                          ),
+                          const SizedBox(width: 8),
+                          RadioButton(
+                              seed: RadioSeed('album', album.id, album.name)),
+                        ],
                       ),
                     ],
                   ),

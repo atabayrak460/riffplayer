@@ -1,3 +1,4 @@
+import { useRadioStore } from '../store/radio';
 import { QualityBadge } from '../components/QualityBadge';
 import { albumQuality } from '../lib/quality';
 import { useParams } from 'react-router-dom';
@@ -144,6 +145,12 @@ export function AlbumDetailPage() {
               className="bg-brand hover:bg-brand-dim text-on-brand text-sm font-medium px-5 py-2 rounded-full transition-colors"
             >
               Play
+            </button>
+            <button
+              onClick={() => void useRadioStore.getState().start({ type: 'album', id: album.id, name: album.name })}
+              className="text-zinc-400 hover:text-zinc-50 transition-colors text-sm"
+            >
+              Radio
             </button>
             <AlbumDownloadButton
               state={downloadState}

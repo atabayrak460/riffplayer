@@ -334,6 +334,44 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   return fetch(`${base}/api/v1/${path}`, { ...init, headers });
 }
 
+// ── Song radio ───────────────────────────────────────────────────────────────
+
+export type RadioSeedType = 'song' | 'artist' | 'album' | 'playlist';
+
+/** A batch of songs for an endless radio queue. [exclude] = ids already queued. */
+export async function getRadio(type: RadioSeedType, id: string, count = 30, exclude: string[] = []): Promise<Song[]> {
+  const params = new URLSearchParams({ type, id, count: String(count) });
+  if (exclude.length) params.set('exclude', exclude.join(','));
+  const r = (await apiCall('GET', `radio?${params}`)) as { songs: Song[] };
+  return r.songs ?? [];
+}
+
+// ── Share pictures (rendered on the server) ──────────────────────────────────
+
+async function apiImage(path: string): Promise<Blob> {
+  const res = await apiFetch(path);
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({ error: `HTTP ${res.status}` }))) as { error?: string };
+    throw new Error(data.error ?? `HTTP ${res.status}`);
+  }
+  return res.blob();
+}
+
+/** A picture of one song ("story" 9:16 or "post" 4:5), ready to share. */
+export function getSongShareImage(id: string, size: 'story' | 'post' = 'story'): Promise<Blob> {
+  return apiImage(`share/song/${encodeURIComponent(id)}?size=${size}`);
+}
+
+export async function getPlaylistSharePages(id: string): Promise<number> {
+  const r = (await apiCall('GET', `share/playlist/${encodeURIComponent(id)}/pages`)) as { pages: number };
+  return r.pages;
+}
+
+/** Picture [page] (1-based) of a playlist. */
+export function getPlaylistShareImage(id: string, page: number): Promise<Blob> {
+  return apiImage(`share/playlist/${encodeURIComponent(id)}/page/${page}`);
+}
+
 async function apiPut(path: string, body: unknown): Promise<void> {
   await apiCall('PUT', path, body);
 }

@@ -460,60 +460,6 @@ function getTopSongs(req: FastifyRequest, reply: FastifyReply): void {
   });
 }
 
-function getSimilarSongs2(req: FastifyRequest, reply: FastifyReply): void {
-  const { f, id, count = '50' } = p(req);
-  if (!id) return sendError(reply, f, { code: SubsonicErrorCode.MISSING_PARAM, message: 'id required' });
-
-  const db = getDb();
-  const userId = req.subsonicUser!.id;
-  const lim = Math.min(Number(count) || 50, 500);
-  const numId = Number(id);
-
-  // `id` can be a song, album, or artist id per the Subsonic spec — resolve
-  // whichever it is down to an artist, then (no external similarity data,
-  // same reasoning as getTopSongs above) fall back to that artist's other
-  // songs as the closest honest answer to "similar".
-  let artistId: number | undefined;
-  let excludeTrackId: number | undefined;
-
-  const track = db.prepare('SELECT artist_id FROM tracks WHERE id = ?').get(numId) as
-    | { artist_id: number }
-    | undefined;
-  if (track) {
-    artistId = track.artist_id;
-    excludeTrackId = numId;
-  } else {
-    const album = db.prepare('SELECT artist_id FROM albums WHERE id = ?').get(numId) as
-      | { artist_id: number }
-      | undefined;
-    if (album) {
-      artistId = album.artist_id;
-    } else {
-      const artistRow = db.prepare('SELECT id FROM artists WHERE id = ?').get(numId) as
-        | { id: number }
-        | undefined;
-      if (artistRow) artistId = artistRow.id;
-    }
-  }
-
-  if (artistId == null) {
-    return sendError(reply, f, { code: SubsonicErrorCode.DATA_NOT_FOUND, message: 'Unknown id' });
-  }
-
-  const songs = db
-    .prepare(`
-      SELECT ${SONG_COLS}
-      WHERE ar.id = ? ${excludeTrackId ? 'AND t.id != ?' : ''}
-      ORDER BY RANDOM() LIMIT ?
-    `)
-    .all(userId, artistId, ...(excludeTrackId ? [excludeTrackId] : []), lim) as SongRow[];
-
-  sendOk(reply, f, {
-    xml: xmlTag('similarSongs2', {}, songs.map((s) => xmlTag('song', songAttrs(s))).join('')),
-    json: { similarSongs2: { song: songs.map((s) => toJson(songAttrs(s))) } },
-  });
-}
-
 function getGenres(req: FastifyRequest, reply: FastifyReply): void {
   const { f } = p(req);
   const db = getDb();
@@ -554,6 +500,5 @@ export async function browsePlugin(app: FastifyInstance): Promise<void> {
   route('/getAlbumList2.view', getAlbumList2);
   route('/getRandomSongs.view', getRandomSongs);
   route('/getTopSongs.view', getTopSongs);
-  route('/getSimilarSongs2.view', getSimilarSongs2);
   route('/getGenres.view', getGenres);
 }

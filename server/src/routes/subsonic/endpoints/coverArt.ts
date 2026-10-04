@@ -458,3 +458,17 @@ async function coverArtHandler(req: FastifyRequest, reply: FastifyReply): Promis
 export async function coverArtPlugin(app: FastifyInstance): Promise<void> {
   app.route({ method: ['GET', 'POST'], url: '/getCoverArt.view', handler: coverArtHandler });
 }
+
+/** The image file to use as an album's cover (uploaded, embedded or fetched), or null if it has none. */
+export async function albumCoverFile(albumId: number): Promise<string | null> {
+  return (await resolveAlbumArt(albumId, getCoversDir()))?.filePath ?? null;
+}
+
+/** A playlist's cover file: the uploaded one, else the generated mosaic, else null. */
+export async function playlistCoverFile(playlistId: number): Promise<string | null> {
+  const row = getDb().prepare('SELECT cover_path FROM playlists WHERE id = ?').get(playlistId) as
+    | { cover_path: string | null }
+    | undefined;
+  if (row?.cover_path) return row.cover_path;
+  return (await resolvePlaylistMosaic(playlistId, getCoversDir()))?.filePath ?? null;
+}

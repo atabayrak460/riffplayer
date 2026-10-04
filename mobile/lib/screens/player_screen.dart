@@ -1,3 +1,4 @@
+import '../utils/share_actions.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -221,6 +222,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         centerTitle: true,
         actions: [
           const DevicePickerButton(),
+          if (song != null)
+            IconButton(
+              icon: const Icon(Icons.ios_share),
+              tooltip: 'Share as picture',
+              onPressed: () => shareSongAsPicture(context, ref, song),
+            ),
           IconButton(
             icon: const Icon(Icons.queue_music),
             tooltip: 'Queue',

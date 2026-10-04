@@ -232,46 +232,7 @@ describe('getTopSongs', () => {
   });
 });
 
-describe('getSimilarSongs2', () => {
-  it('returns MISSING_PARAM when id is absent', async () => {
-    const res = await app.inject({ url: `/rest/getSimilarSongs2.view?${auth}` });
-    const r = sr(res.body);
-    expect(r.status).toBe('failed');
-    expect((r.error as Record<string, unknown>).code).toBe(10);
-  });
-
-  it('resolves an artist id to that artist\'s songs', async () => {
-    const res = await app.inject({ url: `/rest/getSimilarSongs2.view?${auth}&id=${ids.artistId}` });
-    const r = sr(res.body);
-    expect(r.status).toBe('ok');
-    const list = (r.similarSongs2 as Record<string, unknown[]>).song as Record<string, unknown>[];
-    expect(list.length).toBe(1);
-    expect(list[0].title).toBe('Test Track');
-  });
-
-  it('resolves an album id to its artist\'s songs', async () => {
-    const res = await app.inject({ url: `/rest/getSimilarSongs2.view?${auth}&id=${ids.albumId}` });
-    const r = sr(res.body);
-    const list = (sr(res.body).similarSongs2 as Record<string, unknown[]>).song;
-    expect(r.status).toBe('ok');
-    expect(list.length).toBe(1);
-  });
-
-  it("resolves a song id to its artist's other songs, excluding itself", async () => {
-    const res = await app.inject({ url: `/rest/getSimilarSongs2.view?${auth}&id=${ids.trackId}` });
-    const r = sr(res.body);
-    expect(r.status).toBe('ok');
-    const list = (r.similarSongs2 as Record<string, unknown[]>).song;
-    expect(list.length).toBe(0); // the only track by this artist is the seed itself
-  });
-
-  it('returns DATA_NOT_FOUND for an id that matches no song/album/artist', async () => {
-    const res = await app.inject({ url: `/rest/getSimilarSongs2.view?${auth}&id=99999` });
-    const r = sr(res.body);
-    expect(r.status).toBe('failed');
-    expect((r.error as Record<string, unknown>).code).toBe(70);
-  });
-});
+// getSimilarSongs / getSimilarSongs2 now run the song radio — see __tests__/api/radio.test.ts.
 
 describe('getMusicDirectory', () => {
   it('browses an artist directory, returning its album as the child', async () => {

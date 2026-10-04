@@ -1,3 +1,4 @@
+import { useRadioStore } from '../store/radio';
 import {
   DndContext,
   closestCenter,
@@ -97,6 +98,8 @@ function QueueItem({ song, index, isCurrent, canRemove = true, onRemove, onPlay 
 }
 
 export function QueuePage() {
+  const radioSeed = useRadioStore((s) => s.seed);
+  const stopRadio = useRadioStore((s) => s.stop);
   const localQueue = usePlayerStore((s) => s.queue);
   const localIndex = usePlayerStore((s) => s.queueIndex);
   // While another device is the one playing, this page shows and edits *its* queue.
@@ -133,6 +136,12 @@ export function QueuePage() {
         <div>
           <h1 className="text-2xl font-bold text-zinc-50">Queue</h1>
           {remoteActive && remoteDevice && <p className="text-xs text-brand">On {remoteDevice.name}</p>}
+          {radioSeed && !remoteActive && (
+            <p className="text-xs text-brand mt-1">
+              Radio · {radioSeed.name} — keeps adding similar songs{' '}
+              <button onClick={stopRadio} className="underline text-zinc-400 hover:text-zinc-50 ml-1">Stop</button>
+            </p>
+          )}
         </div>
         {queue.length > 0 && !remoteActive && (
           <button

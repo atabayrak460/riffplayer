@@ -1,3 +1,4 @@
+import { useRadioStore } from '../store/radio';
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -17,6 +18,7 @@ import { usePlayerStore } from '../store/player';
 import { useDownloadsStore } from '../store/downloads';
 import { resolveDragReorderIndices } from '../lib/dragReorder';
 import { CoverUploadControl } from '../components/CoverUploadControl';
+import { sharePlaylist } from '../lib/share';
 import { PlaylistCover } from '../components/StockCovers';
 import { SongRow } from '../components/SongRow';
 import { DownloadButton } from '../components/DownloadButton';
@@ -269,6 +271,19 @@ export function PlaylistDetailPage() {
           onDownload={() => requestDownload({ kind: 'playlist', playlist, songs })}
           onRemove={() => removePlaylistDownload(playlist.id)}
         />
+        <button
+          onClick={() => void useRadioStore.getState().start({ type: 'playlist', id: playlist.id, name: playlist.name })}
+          disabled={!songs.length}
+          className="text-zinc-400 hover:text-zinc-50 transition-colors text-sm disabled:opacity-50"
+        >
+          Radio
+        </button>
+        <button
+          onClick={() => void sharePlaylist(playlist)}
+          className="text-zinc-400 hover:text-zinc-50 transition-colors text-sm"
+        >
+          Share as picture
+        </button>
         <button
           onClick={() => { if (confirm(`Delete "${playlist.name}"?`)) deleteMutation.mutate(); }}
           className="text-zinc-400 hover:text-red-400 transition-colors text-sm"
