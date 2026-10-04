@@ -8,7 +8,26 @@ import type { Song } from './types';
 
 export type DeviceType = 'web' | 'android' | 'desktop';
 export type RepeatMode = 'off' | 'all' | 'one';
-export type CommandType = 'play' | 'pause' | 'next' | 'previous' | 'seek';
+export type CommandType =
+  | 'play' | 'pause' | 'next' | 'previous' | 'seek'
+  | 'volume' | 'queue_play' | 'queue_remove' | 'queue_move' | 'queue_add';
+export type QueueAddMode = 'next' | 'end';
+
+/** What a sender attaches to a command; which fields apply depends on the type (see the server's hub). */
+export interface CommandArgs {
+  positionMs?: number;
+  /** 0..1 */
+  volume?: number;
+  /** queue_play / queue_remove / queue_move: the real queue position of the song. */
+  index?: number;
+  /** queue_move: where to put it. */
+  to?: number;
+  /** The song the sender saw at `index` — the playing device ignores the command if the queue changed under it. */
+  songId?: string;
+  /** queue_add (sent as ids; the playing device receives the resolved `songs`). */
+  songIds?: string[];
+  mode?: QueueAddMode;
+}
 
 export interface DeviceInfo {
   id: string;
@@ -33,6 +52,8 @@ export interface PublicState {
   repeat: RepeatMode;
   shuffle: boolean;
   counted: boolean;
+  /** The playing device's own player volume, 0..1 (absent from servers older than phase 2). */
+  volume?: number;
 }
 
 export interface Snapshot {
@@ -49,11 +70,12 @@ export interface LoadInstruction {
   counted: boolean;
 }
 
-export interface CommandInstruction {
+export interface CommandInstruction extends Omit<CommandArgs, 'songIds'> {
   commandId: string;
   type: CommandType;
-  positionMs?: number;
   expiresAtMs: number;
+  /** queue_add: the songs to queue, already resolved by the server. */
+  songs?: Song[];
 }
 
 export interface DeviceIdentity {
@@ -115,6 +137,7 @@ export interface StateReport {
   repeat: RepeatMode;
   shuffle: boolean;
   counted: boolean;
+  volume?: number;
 }
 
 export type ReportResult =
@@ -152,11 +175,13 @@ export async function sendCommand(
   type: CommandType,
   positionMs?: number,
   targetDeviceId?: string,
+  args?: CommandArgs,
 ): Promise<CommandResult> {
   const res = await post('command', {
     deviceId,
     commandId: newId(),
     type,
+    ...args,
     ...(positionMs !== undefined ? { positionMs: Math.round(positionMs) } : {}),
     ...(targetDeviceId !== undefined ? { targetDeviceId } : {}),
   });
@@ -194,11 +219,19 @@ export async function renameDevice(deviceId: string, name: string): Promise<bool
   return !!res?.ok;
 }
 
-export async function fetchQueue(): Promise<{ queueVersion: number; index: number; songs: Song[] } | null> {
+export interface RemoteQueueResponse {
+  queueVersion: number;
+  index: number;
+  songs: Song[];
+  /** Real queue position of each song (the library may have dropped some). Absent from older servers. */
+  positions?: number[];
+}
+
+export async function fetchQueue(): Promise<RemoteQueueResponse | null> {
   try {
     const res = await apiFetch('connect/queue');
     if (!res.ok) return null;
-    return (await res.json()) as { queueVersion: number; index: number; songs: Song[] };
+    return (await res.json()) as RemoteQueueResponse;
   } catch {
     return null;
   }

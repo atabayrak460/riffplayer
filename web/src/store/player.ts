@@ -40,8 +40,21 @@ let volumeBeforeMute: number | null = null;
 export interface RemoteController {
   isRemote(): boolean;
   command(type: 'play' | 'pause' | 'next' | 'previous' | 'seek', positionMs?: number): void;
+  /** Phase 2: the other device's volume and queue. `index` is the position in the queue as this device shows it. */
+  setVolume(volume: number): void;
+  /** The other device's volume (1 if it hasn't said). */
+  volume(): number;
+  queueAdd(song: Song, mode: 'next' | 'end'): void;
+  queueRemove(index: number): void;
+  queueMove(from: number, to: number): void;
 }
 export const remote: { current: RemoteController | null } = { current: null };
+
+/** The volume the user is adjusting right now: the other device's while it is the one playing, else this device's. */
+export function effectiveVolume(): number {
+  const r = remote.current;
+  return r?.isRemote() ? r.volume() : usePlayerStore.getState().volume;
+}
 
 // Whether the track now loaded has already been counted as a play (scrobbled). Connect hands this to
 // the device that takes over, so a transfer mid-song doesn't count the same listen twice.
@@ -97,6 +110,8 @@ interface PlayerState {
   // Actions
   playSong: (song: Song, queue?: Song[]) => void;
   playQueue: (songs: Song[], index?: number) => void;
+  /** Jump to a song already in the queue, keeping the queue (and shuffle order) as it is. */
+  jumpTo: (index: number) => void;
   /** Loads a queue at a position (used when playback is handed over from another device). */
   restoreQueue: (songs: Song[], index: number, positionMs: number, play: boolean, counted?: boolean) => void;
   /** Silences the local audio element without touching the queue. */
@@ -244,6 +259,14 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
       loadAndPlay(song);
     },
 
+    jumpTo: (index) => {
+      const song = get().queue[index];
+      if (!song) return;
+      const repeatMode = get().repeatMode === 'one' ? 'off' : get().repeatMode;
+      set({ queueIndex: index, currentSong: song, repeatMode });
+      loadAndPlay(song);
+    },
+
     restoreQueue: (songs, index, positionMs, play, counted = false) => {
       if (!songs.length) return;
       const i = Math.min(Math.max(index, 0), songs.length - 1);
@@ -335,25 +358,36 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
     },
 
     setVolume: (v) => {
+      const r = remote.current;
+      if (r?.isRemote()) {
+        r.setVolume(v); // the other device's volume — this device's own stays as it is
+        return;
+      }
       audio.volume = v;
       set({ volume: v });
     },
 
     toggleMute: () => {
-      const { volume } = get();
+      const r = remote.current;
+      // While another device plays, "volume" is that device's: the bar (and keys) show and drive it.
+      const volume = r?.isRemote() ? r.volume() : get().volume;
+      let target: number;
       if (volume > 0) {
         volumeBeforeMute = volume;
-        audio.volume = 0;
-        set({ volume: 0 });
+        target = 0;
       } else {
-        const restored = volumeBeforeMute ?? 1;
+        target = volumeBeforeMute ?? 1;
         volumeBeforeMute = null;
-        audio.volume = restored;
-        set({ volume: restored });
       }
+      get().setVolume(target);
     },
 
     playNext: (song) => {
+      const r = remote.current;
+      if (r?.isRemote()) {
+        r.queueAdd(song, 'next');
+        return;
+      }
       set((s) => {
         const insertAt = s.queueIndex + 1;
         const queue = [...s.queue.slice(0, insertAt), song, ...s.queue.slice(insertAt)];
@@ -363,6 +397,11 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
     },
 
     addToQueue: (song) => {
+      const r = remote.current;
+      if (r?.isRemote()) {
+        r.queueAdd(song, 'end');
+        return;
+      }
       set((s) => ({
         queue: [...s.queue, song],
         originalQueue: s.originalQueue ? [...s.originalQueue, song] : s.originalQueue,
@@ -370,6 +409,11 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
     },
 
     removeFromQueue: (index) => {
+      const r = remote.current;
+      if (r?.isRemote()) {
+        r.queueRemove(index);
+        return;
+      }
       set((s) => {
         const removedSong = s.queue[index];
         const queue = s.queue.filter((_, i) => i !== index);
@@ -390,6 +434,11 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
     },
 
     reorderQueue: (from, to) => {
+      const r = remote.current;
+      if (r?.isRemote()) {
+        r.queueMove(from, to);
+        return;
+      }
       set((s) => {
         const queue = [...s.queue];
         const [moved] = queue.splice(from, 1);

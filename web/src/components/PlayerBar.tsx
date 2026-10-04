@@ -45,7 +45,7 @@ export function PlayerBar() {
   const playing = usePlayerStore((s) => s.playing);
   const currentTime = usePlayerStore((s) => s.currentTime);
   const duration = usePlayerStore((s) => s.duration);
-  const volume = usePlayerStore((s) => s.volume);
+  const localVolume = usePlayerStore((s) => s.volume);
   const repeatMode = usePlayerStore((s) => s.repeatMode);
   const shuffle = usePlayerStore((s) => s.shuffle);
   const togglePlay = usePlayerStore((s) => s.togglePlay);
@@ -57,8 +57,11 @@ export function PlayerBar() {
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
   const playNext = usePlayerStore((s) => s.playNext);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
-  // Another device is the one playing: this bar is only a remote (volume of that device isn't controllable yet).
+  // Another device is the one playing: this bar is only a remote, and the volume slider drives that device's volume.
   const remoteActive = useConnectStore((s) => s.status === 'online' && s.activeDeviceId !== null && s.activeDeviceId !== s.deviceId);
+  const remoteVolume = useConnectStore((s) => (s.status === 'online' && s.activeDeviceId !== null && s.activeDeviceId !== s.deviceId ? (s.remote?.volume ?? 1) : null));
+  const remoteUnreachable = useConnectStore((s) => remoteActive && s.devices.find((d) => d.id === s.activeDeviceId)?.online === false);
+  const volume = remoteVolume ?? localVolume;
 
   const navigate = useNavigate();
   const downloadState = useDownloadsStore((s) => s.trackState(currentSong?.id ?? ''));
@@ -234,11 +237,11 @@ export function PlayerBar() {
         max={1}
         step={0.02}
         value={volume}
-        disabled={remoteActive}
-        title={remoteActive ? 'Volume of the other device can\'t be changed from here yet' : undefined}
+        disabled={remoteUnreachable}
+        title={remoteUnreachable ? 'That device isn\'t reachable right now' : remoteActive ? 'Volume of the device that is playing' : undefined}
         onChange={(e) => setVolume(Number(e.target.value))}
         style={{ background: `linear-gradient(to right, #a78bfa ${volumePct}%, #3f3f46 ${volumePct}%)` }}
-        className={`w-20 ${remoteActive ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+        className={`w-20 ${remoteUnreachable ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
       />
     </div>
   );

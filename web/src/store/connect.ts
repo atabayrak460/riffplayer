@@ -11,8 +11,10 @@ import { useAuthStore } from './auth';
 import { useToastStore } from './toast';
 import * as api from '../api/connect';
 import { savePlayQueue, getPlayQueue } from '../api/subsonic';
-import type { CommandInstruction, DeviceInfo, DeviceIdentity, LoadInstruction, PublicState, Snapshot } from '../api/connect';
+import type { CommandArgs, CommandInstruction, DeviceInfo, DeviceIdentity, LoadInstruction, PublicState, Snapshot } from '../api/connect';
 import { SseParser, backoffMs, defaultDeviceName, newId, positionNow } from '../lib/connectProtocol';
+import { moveInView, removeFromView, viewIndexOf, type RemoteQueueView } from '../lib/remoteQueue';
+import type { Song } from '../api/types';
 
 export type ConnectStatus = 'idle' | 'connecting' | 'online' | 'offline' | 'unavailable';
 
@@ -25,12 +27,18 @@ interface ConnectState {
   activeDeviceId: string | null;
   /** What the active device last reported (also while it is this device). */
   remote: PublicState | null;
+  /** The other device's queue, kept fresh while something (the Queue page) is watching it. */
+  remoteQueue: RemoteQueueView | null;
 
   start: () => void;
   stop: () => void;
   transferTo: (deviceId: string) => Promise<void>;
   transferHere: () => Promise<void>;
   renameThisDevice: (name: string) => Promise<void>;
+  /** Start keeping `remoteQueue` current; returns the function that stops watching. */
+  watchRemoteQueue: () => () => void;
+  /** Jump to the song at this index of `remoteQueue` on the playing device. */
+  playRemoteQueueItem: (index: number) => void;
   /** Entry point for server events — exposed so tests can drive the store without a network. */
   _handle: (name: string, data: unknown) => void;
 }
@@ -57,6 +65,13 @@ const TAKEOVER_GRACE_MS = 8_000;
 /** Fetching the queue of a handover: tries, and the waits between them. */
 const LOAD_ATTEMPTS = 3;
 const LOAD_RETRY_MS = [500, 1_500];
+/** While dragging the volume slider the other device hears it at most this often (plus the final value). */
+const VOLUME_SEND_EVERY_MS = 150;
+/** After the user moves the volume, state reports about the old value must not move the slider back. */
+const VOLUME_HOLD_MS = 1_500;
+/** Songs added in quick succession (an album: one "play next" per song) travel as one command. */
+const QUEUE_ADD_BATCH_MS = 60;
+const QUEUE_ADD_CHUNK = 100;
 
 // ── Identity (persisted) ─────────────────────────────────────────────────────
 
@@ -101,6 +116,13 @@ let reportTimer: ReturnType<typeof setTimeout> | undefined;
 let driftTimer: ReturnType<typeof setInterval> | undefined;
 let mirrorTimer: ReturnType<typeof setInterval> | undefined;
 let seekTimer: ReturnType<typeof setTimeout> | undefined;
+let volumeTimer: ReturnType<typeof setTimeout> | undefined;
+let pendingVolume: number | null = null;
+let volumeHoldUntil = 0;
+let queueAddTimer: ReturnType<typeof setTimeout> | undefined;
+let pendingAdds: { next: Song[]; end: Song[] } = { next: [], end: [] };
+let queueWatchers = 0;
+let fetchingQueue = false;
 let unsubscribePlayer: (() => void) | null = null;
 let removeWindowListeners: (() => void) | null = null;
 
@@ -172,7 +194,47 @@ export const useConnectStore = create<ConnectState>()((set, get) => {
     } else {
       takeoverUntil = 0; // this device is the player now (or nobody is): the takeover is settled
       stopMirror();
+      if (get().remoteQueue) set({ remoteQueue: null });
     }
+  }
+
+  // ── The other device's queue (phase 2) ───────────────────────────────────────
+
+  /** Keeps `remoteQueue` in step with the playing device, but only while someone watches it (it costs a fetch). */
+  async function refreshRemoteQueue(retry = true): Promise<void> {
+    const r = get().remote;
+    if (queueWatchers === 0 || !isRemote() || !r || fetchingQueue) return;
+    if (get().remoteQueue?.version === r.queueVersion) return;
+    fetchingQueue = true;
+    let fetched = false;
+    try {
+      const q = await api.fetchQueue();
+      if (q && isRemote()) {
+        fetched = true;
+        const positions = q.positions ?? q.songs.map((_, i) => i);
+        const current = get().remote;
+        const index = current ? viewIndexOf(positions, current.index) : q.index;
+        set({ remoteQueue: { version: q.queueVersion, songs: q.songs, positions, index: index >= 0 ? index : q.index } });
+      }
+    } catch {
+      // keep showing what we have; the next state event tries again
+    } finally {
+      fetchingQueue = false;
+    }
+    // The queue may have changed again while the request was in flight: look once more, but only once and only
+    // after a fetch that worked — never a request loop (a failing server, or a view that is already ahead).
+    const now = get().remote;
+    const have = get().remoteQueue?.version;
+    if (retry && fetched && now && have !== undefined && have < now.queueVersion) void refreshRemoteQueue(false);
+  }
+
+  /** The current song's place in the shown queue follows the device's state without a refetch. */
+  function followRemoteIndex(): void {
+    const view = get().remoteQueue;
+    const r = get().remote;
+    if (!view || !r || view.version !== r.queueVersion) return;
+    const index = viewIndexOf(view.positions, r.index);
+    if (index !== view.index) set({ remoteQueue: { ...view, index } });
   }
 
   // ── Reporting this device's playback ─────────────────────────────────────────
@@ -206,6 +268,7 @@ export const useConnectStore = create<ConnectState>()((set, get) => {
       repeat: p.repeatMode,
       shuffle: p.shuffle,
       counted: currentPlayCounted(),
+      volume: p.volume,
     });
 
     switch (result.kind) {
@@ -239,7 +302,7 @@ export const useConnectStore = create<ConnectState>()((set, get) => {
 
     const changed =
       s.queue !== prev.queue || s.queueIndex !== prev.queueIndex || s.playing !== prev.playing ||
-      s.repeatMode !== prev.repeatMode || s.shuffle !== prev.shuffle;
+      s.repeatMode !== prev.repeatMode || s.shuffle !== prev.shuffle || s.volume !== prev.volume;
     if ((changed || jumped) && shouldReport()) scheduleReport();
   }
 
@@ -304,6 +367,30 @@ export const useConnectStore = create<ConnectState>()((set, get) => {
         case 'next': p.next(); break;
         case 'previous': p.prev(); break;
         case 'seek': p.seek((c.positionMs ?? 0) / 1000); break;
+        case 'volume':
+          if (typeof c.volume === 'number' && Number.isFinite(c.volume)) p.setVolume(Math.min(1, Math.max(0, c.volume)));
+          break;
+        // The queue edits name the song they were aimed at: if the queue changed since the sender looked, the
+        // index points at something else now and the edit is dropped rather than applied to the wrong song.
+        case 'queue_play':
+          if (c.index !== undefined && p.queue[c.index]?.id === c.songId) p.jumpTo(c.index);
+          break;
+        case 'queue_remove':
+          // Removing the song that is playing would stop the music; the other device's UI doesn't offer it.
+          if (c.index !== undefined && c.index !== p.queueIndex && p.queue[c.index]?.id === c.songId) p.removeFromQueue(c.index);
+          break;
+        case 'queue_move':
+          if (c.index !== undefined && c.to !== undefined && c.to >= 0 && c.to < p.queue.length && p.queue[c.index]?.id === c.songId) {
+            p.reorderQueue(c.index, c.to);
+          }
+          break;
+        case 'queue_add': {
+          const songs = (c.songs ?? []).filter((x) => x && typeof x.id === 'string');
+          // "Play next" inserts each song right after the current one, so a block goes in back to front.
+          if (c.mode === 'next') for (const song of [...songs].reverse()) p.playNext(song);
+          else if (c.mode === 'end') for (const song of songs) p.addToQueue(song);
+          break;
+        }
       }
     } finally {
       executingLocal = false;
@@ -344,6 +431,7 @@ export const useConnectStore = create<ConnectState>()((set, get) => {
         const s = data as Snapshot;
         set({ devices: s.devices, activeDeviceId: s.activeDeviceId, remote: s.state });
         syncMirror();
+        void refreshRemoteQueue();
         // (Re)connected: let the server know our queue again (it may have restarted).
         forceQueue = true;
         if (shouldReport()) scheduleReport(0);
@@ -354,12 +442,18 @@ export const useConnectStore = create<ConnectState>()((set, get) => {
         const d = data as { devices: DeviceInfo[]; activeDeviceId: string | null };
         set({ devices: d.devices, activeDeviceId: d.activeDeviceId });
         syncMirror();
+        void refreshRemoteQueue();
         break;
       }
       case 'state': {
-        const s = data as PublicState;
+        let s = data as PublicState;
+        // The user just moved the volume: a report generated before the device heard about it must not drag the slider back.
+        const held = get().remote?.volume;
+        if (Date.now() < volumeHoldUntil && held !== undefined) s = { ...s, volume: held };
         set({ remote: s, activeDeviceId: s.activeDeviceId });
         syncMirror();
+        followRemoteIndex();
+        void refreshRemoteQueue();
         break;
       }
       case 'command':
@@ -381,9 +475,11 @@ export const useConnectStore = create<ConnectState>()((set, get) => {
   // ── Commands this device sends while it is only a remote ─────────────────────
 
   /** Resolves to whether the command was delivered. */
-  async function sendRemoteCommand(type: Parameters<RemoteController['command']>[0], positionMs?: number): Promise<boolean> {
+  async function sendRemoteCommand(type: Parameters<RemoteController['command']>[0] | CommandInstruction['type'], positionMs?: number, args?: CommandArgs): Promise<boolean> {
     // Aimed at the device we believe is playing; the server refuses it if another one has taken over.
-    const result = await api.sendCommand(get().deviceId, type, positionMs, get().activeDeviceId ?? undefined);
+    const result = args
+      ? await api.sendCommand(get().deviceId, type, positionMs, get().activeDeviceId ?? undefined, args)
+      : await api.sendCommand(get().deviceId, type, positionMs, get().activeDeviceId ?? undefined);
     if (result === 'sent') return true;
     const active = get().devices.find((d) => d.id === get().activeDeviceId);
     useToastStore.getState().show(
@@ -391,13 +487,96 @@ export const useConnectStore = create<ConnectState>()((set, get) => {
         ? 'Another device just took over — try again'
         : result === 'no_active_device' || result === 'unknown_device'
           ? `${active?.name ?? 'That device'} isn't reachable right now`
-          : 'Couldn\'t reach the server',
+          : result === 'rate_limited'
+            ? 'Slow down a little'
+            : 'Couldn\'t reach the server',
     );
     return false;
   }
 
+  function activeName(): string {
+    return get().devices.find((d) => d.id === get().activeDeviceId)?.name ?? 'the other device';
+  }
+
+  // Volume: the slider follows the finger at once; the other device hears it at a steady pace, then the final value.
+  function sendVolume(): void {
+    volumeTimer = undefined;
+    if (pendingVolume === null) return;
+    const v = pendingVolume;
+    pendingVolume = null;
+    void sendRemoteCommand('volume', undefined, { volume: v });
+    // Keep the cooldown running so a drag doesn't flood the server; a value that arrives meanwhile goes out at its end.
+    volumeTimer = setTimeout(sendVolume, VOLUME_SEND_EVERY_MS);
+  }
+
+  function setRemoteVolume(v: number): void {
+    const volume = Math.min(1, Math.max(0, v));
+    const before = get().remote;
+    if (before) set({ remote: { ...before, volume } });
+    volumeHoldUntil = Date.now() + VOLUME_HOLD_MS;
+    pendingVolume = volume;
+    if (!volumeTimer) sendVolume();
+  }
+
+  // Queue edits: shown at once (the view is updated), then sent; the device's next report replaces the view.
+  function queueTarget(index: number): { real: number; songId: string } | null {
+    const view = get().remoteQueue;
+    const song = view?.songs[index];
+    if (!view || !song) return null;
+    return { real: view.positions[index], songId: song.id };
+  }
+
+  function flushQueueAdds(): void {
+    queueAddTimer = undefined;
+    const { next, end } = pendingAdds;
+    pendingAdds = { next: [], end: [] };
+    const name = activeName();
+    const toast = useToastStore.getState();
+
+    // A "play next" block goes in back to front (each song is inserted right after the current one), so the
+    // calls — which come last song first — are reversed to get the block in listening order.
+    const send = async (mode: 'next' | 'end', ordered: Song[], message: string) => {
+      if (ordered.length === 0) return;
+      const chunks: Song[][] = [];
+      for (let i = 0; i < ordered.length; i += QUEUE_ADD_CHUNK) chunks.push(ordered.slice(i, i + QUEUE_ADD_CHUNK));
+      // For "next" the first chunk must end up first, i.e. be inserted last.
+      const sequence = mode === 'next' ? chunks.reverse() : chunks;
+      let delivered = true;
+      for (const chunk of sequence) {
+        delivered = (await sendRemoteCommand('queue_add', undefined, { mode, songIds: chunk.map((x) => x.id) })) && delivered;
+      }
+      if (delivered) toast.show(message);
+    };
+    const count = (n: number) => (n === 1 ? '1 song' : `${n} songs`);
+    void send('next', [...next].reverse(), `${count(next.length)} will play next on ${name}`);
+    void send('end', end, `Added ${count(end.length)} to the queue on ${name}`);
+  }
+
+  function queueAdd(song: Song, mode: 'next' | 'end'): void {
+    pendingAdds[mode].push(song);
+    if (!queueAddTimer) queueAddTimer = setTimeout(flushQueueAdds, QUEUE_ADD_BATCH_MS);
+  }
+
   const controller: RemoteController = {
     isRemote,
+    setVolume: setRemoteVolume,
+    volume: () => get().remote?.volume ?? 1,
+    queueAdd,
+    queueRemove(index) {
+      const t = queueTarget(index);
+      const view = get().remoteQueue;
+      if (!t || !view) return;
+      set({ remoteQueue: removeFromView(view, index) });
+      void sendRemoteCommand('queue_remove', undefined, { index: t.real, songId: t.songId });
+    },
+    queueMove(from, to) {
+      const t = queueTarget(from);
+      const dest = queueTarget(to);
+      const view = get().remoteQueue;
+      if (!t || !dest || !view) return;
+      set({ remoteQueue: moveInView(view, from, to) });
+      void sendRemoteCommand('queue_move', undefined, { index: t.real, to: dest.real, songId: t.songId });
+    },
     command(type, positionMs) {
       if (type === 'seek') {
         // Dragging the slider fires continuously: send only where it comes to rest.
@@ -537,6 +716,7 @@ export const useConnectStore = create<ConnectState>()((set, get) => {
     devices: [],
     activeDeviceId: null,
     remote: null,
+    remoteQueue: null,
 
     start: () => {
       if (running) return;
@@ -577,7 +757,12 @@ export const useConnectStore = create<ConnectState>()((set, get) => {
       if (reportTimer) clearTimeout(reportTimer);
       if (driftTimer) clearInterval(driftTimer);
       if (seekTimer) clearTimeout(seekTimer);
-      reportTimer = driftTimer = seekTimer = undefined;
+      if (volumeTimer) clearTimeout(volumeTimer);
+      if (queueAddTimer) clearTimeout(queueAddTimer);
+      reportTimer = driftTimer = seekTimer = volumeTimer = queueAddTimer = undefined;
+      pendingVolume = null;
+      volumeHoldUntil = 0;
+      pendingAdds = { next: [], end: [] };
       takeoverUntil = 0;
       stopMirror();
       unsubscribePlayer?.();
@@ -585,7 +770,7 @@ export const useConnectStore = create<ConnectState>()((set, get) => {
       removeWindowListeners?.();
       removeWindowListeners = null;
       if (remoteRegistry.current === controller) remoteRegistry.current = null;
-      set({ status: 'idle', devices: [], activeDeviceId: null, remote: null });
+      set({ status: 'idle', devices: [], activeDeviceId: null, remote: null, remoteQueue: null });
     },
 
     transferTo: async (toDeviceId) => {
@@ -608,6 +793,22 @@ export const useConnectStore = create<ConnectState>()((set, get) => {
       set({ deviceName: clean });
       writeStorage(() => localStorage, NAME_KEY, clean);
       if (get().status === 'online') await api.renameDevice(get().deviceId, clean);
+    },
+
+    watchRemoteQueue: () => {
+      queueWatchers++;
+      void refreshRemoteQueue();
+      let stopped = false;
+      return () => {
+        if (stopped) return;
+        stopped = true;
+        queueWatchers = Math.max(0, queueWatchers - 1);
+      };
+    },
+
+    playRemoteQueueItem: (index) => {
+      const t = queueTarget(index);
+      if (t) void sendRemoteCommand('queue_play', undefined, { index: t.real, songId: t.songId });
     },
 
     _handle: handle,

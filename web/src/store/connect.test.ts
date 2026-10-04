@@ -87,7 +87,7 @@ beforeEach(() => {
   usePlayerStore.setState({ ...playerBase });
   useConnectStore.setState({
     status: 'online', transport: 'stream', deviceId: ME, deviceName: 'My PC',
-    devices: [], activeDeviceId: null, remote: null,
+    devices: [], activeDeviceId: null, remote: null, remoteQueue: null,
   });
   useToastStore.setState({ message: null });
   vi.mocked(api.reportState).mockResolvedValue({ kind: 'ok', takeover: false });
@@ -531,7 +531,7 @@ describe('reporting local playback', () => {
     expect(api.reportState).toHaveBeenCalledTimes(1);
     expect(api.reportState).toHaveBeenCalledWith({
       deviceId: ME, queueIds: ['a', 'b'], index: 0, positionMs: 12_300, playing: true,
-      repeat: 'off', shuffle: false, counted: false,
+      repeat: 'off', shuffle: false, counted: false, volume: 1,
     });
   });
 
@@ -1256,5 +1256,369 @@ describe('resume where you left off', () => {
 
       expect(saves()).toEqual([]);
     });
+  });
+});
+
+
+// ── Phase 2: the other device's volume and queue ─────────────────────────────
+
+describe('remote volume', () => {
+  beforeEach(() => {
+    startOnline();
+    otherIsPlaying({ volume: 0.6 });
+  });
+
+  it('the bar and shortcuts adjust the other device\'s volume, never this device\'s own', async () => {
+    usePlayerStore.setState({ volume: 0.9 });
+    usePlayerStore.getState().setVolume(0.3);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(api.sendCommand).toHaveBeenCalledWith(ME, 'volume', undefined, OTHER, { volume: 0.3 });
+    expect(usePlayerStore.getState().volume).toBe(0.9);
+    expect(FakeAudio.instance.volume).not.toBe(0.3);
+    expect(connectState().remote?.volume).toBe(0.3); // the slider moves at once
+  });
+
+  it('knows the other device\'s volume (1 if the server is older and says nothing)', () => {
+    expect(remoteRegistry.current?.volume()).toBe(0.6);
+    handle('state', remoteState({ volume: undefined }));
+    expect(remoteRegistry.current?.volume()).toBe(1);
+  });
+
+  it('sends a drag at a steady pace and always ends with the final value', async () => {
+    const set = usePlayerStore.getState().setVolume;
+    set(0.1); set(0.2); set(0.3); set(0.4);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.sendCommand).toHaveBeenCalledTimes(1); // the first value goes out at once
+    expect(api.sendCommand).toHaveBeenLastCalledWith(ME, 'volume', undefined, OTHER, { volume: 0.1 });
+
+    await vi.advanceTimersByTimeAsync(150);
+    expect(api.sendCommand).toHaveBeenCalledTimes(2);
+    expect(api.sendCommand).toHaveBeenLastCalledWith(ME, 'volume', undefined, OTHER, { volume: 0.4 }); // not 0.2/0.3
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(api.sendCommand).toHaveBeenCalledTimes(2); // nothing is sent twice
+  });
+
+  it('clamps to 0..1', async () => {
+    usePlayerStore.getState().setVolume(7);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.sendCommand).toHaveBeenLastCalledWith(ME, 'volume', undefined, OTHER, { volume: 1 });
+  });
+
+  it('a state report about the old value does not drag the slider back, a later one does', async () => {
+    usePlayerStore.getState().setVolume(0.2);
+    await vi.advanceTimersByTimeAsync(0);
+
+    handle('state', remoteState({ volume: 0.6 })); // generated before the device heard about it
+    expect(connectState().remote?.volume).toBe(0.2);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    handle('state', remoteState({ volume: 0.5 }));
+    expect(connectState().remote?.volume).toBe(0.5);
+  });
+
+  it('mute remembers the other device\'s volume and restores it', async () => {
+    usePlayerStore.getState().toggleMute();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.sendCommand).toHaveBeenLastCalledWith(ME, 'volume', undefined, OTHER, { volume: 0 });
+
+    await vi.advanceTimersByTimeAsync(200);
+    usePlayerStore.getState().toggleMute();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.sendCommand).toHaveBeenLastCalledWith(ME, 'volume', undefined, OTHER, { volume: 0.6 });
+  });
+
+  it('is applied to this device\'s own player when another device asks for it, and reported back', async () => {
+    stopRemote();
+    handle('command', { commandId: 'v-1', type: 'volume', volume: 0.35, expiresAtMs: Date.now() + 5_000 });
+    expect(usePlayerStore.getState().volume).toBe(0.35);
+    expect(FakeAudio.instance.volume).toBe(0.35);
+
+    handle('command', { commandId: 'v-2', type: 'volume', volume: 9, expiresAtMs: Date.now() + 5_000 });
+    expect(usePlayerStore.getState().volume).toBe(1);
+    handle('command', { commandId: 'v-3', type: 'volume', volume: 'loud', expiresAtMs: Date.now() + 5_000 });
+    expect(usePlayerStore.getState().volume).toBe(1); // garbage is ignored
+  });
+
+  it('this device reports its volume, so the others can show it', async () => {
+    stopRemote();
+    usePlayerStore.setState({ queue: [song('a'), song('b')], queueIndex: 0, currentSong: song('a'), playing: true, volume: 0.4 });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(api.reportState).toHaveBeenLastCalledWith(expect.objectContaining({ volume: 0.4 }));
+
+    vi.mocked(api.reportState).mockClear();
+    usePlayerStore.getState().setVolume(0.8);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(api.reportState).toHaveBeenCalledTimes(1);
+    expect(api.reportState).toHaveBeenLastCalledWith(expect.objectContaining({ volume: 0.8 }));
+  });
+
+  /** This device becomes the playing one. */
+  function stopRemote() {
+    handle('snapshot', { devices: [device(ME, { active: true }), device(OTHER)], activeDeviceId: ME, state: null });
+  }
+});
+
+describe('the other device\'s queue', () => {
+  const queueOf = (ids: string[], version = 1, over: Record<string, unknown> = {}) => ({
+    queueVersion: version, index: 0, songs: ids.map((id) => song(id)), positions: ids.map((_, i) => i), ...over,
+  });
+  let unwatch: () => void;
+
+  beforeEach(() => {
+    startOnline();
+    vi.mocked(api.fetchQueue).mockResolvedValue(queueOf(['a', 'b', 'c', 'd']));
+    otherIsPlaying({ queueVersion: 1, index: 1, queueLength: 4 });
+  });
+  afterEach(() => unwatch?.());
+
+  async function watch() {
+    unwatch = connectState().watchRemoteQueue();
+    await vi.advanceTimersByTimeAsync(0);
+  }
+
+  it('is fetched only while someone watches, and the current song follows the device\'s index', async () => {
+    expect(api.fetchQueue).not.toHaveBeenCalled();
+    expect(connectState().remoteQueue).toBeNull();
+
+    await watch();
+    expect(api.fetchQueue).toHaveBeenCalledTimes(1);
+    expect(connectState().remoteQueue?.songs.map((s) => s.id)).toEqual(['a', 'b', 'c', 'd']);
+    expect(connectState().remoteQueue?.index).toBe(1); // from the state, not the fetch (which said 0)
+
+    handle('state', remoteState({ queueVersion: 1, index: 3, queueLength: 4 }));
+    expect(connectState().remoteQueue?.index).toBe(3);
+    expect(api.fetchQueue).toHaveBeenCalledTimes(1); // a new current song needs no refetch
+  });
+
+  it('is fetched again when the queue itself changes, but not when a report repeats the same version', async () => {
+    await watch();
+    vi.mocked(api.fetchQueue).mockResolvedValue(queueOf(['a', 'b', 'x', 'c', 'd'], 2));
+
+    handle('state', remoteState({ queueVersion: 1, index: 1 }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.fetchQueue).toHaveBeenCalledTimes(1);
+
+    handle('state', remoteState({ queueVersion: 2, index: 1, queueLength: 5 }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.fetchQueue).toHaveBeenCalledTimes(2);
+    expect(connectState().remoteQueue?.songs).toHaveLength(5);
+  });
+
+  it('stops fetching when the last watcher leaves, and drops the view when this device plays again', async () => {
+    await watch();
+    unwatch();
+    handle('state', remoteState({ queueVersion: 2 }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.fetchQueue).toHaveBeenCalledTimes(1);
+
+    await watch();
+    expect(connectState().remoteQueue).not.toBeNull();
+    handle('snapshot', { devices: [device(ME, { active: true }), device(OTHER)], activeDeviceId: ME, state: null });
+    expect(connectState().remoteQueue).toBeNull();
+  });
+
+  it('survives a failed fetch and tries again on the next state', async () => {
+    vi.mocked(api.fetchQueue).mockResolvedValueOnce(null);
+    await watch();
+    expect(connectState().remoteQueue).toBeNull();
+
+    handle('state', remoteState({ queueVersion: 1 }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(connectState().remoteQueue?.songs).toHaveLength(4);
+  });
+
+  it('removing a song is sent with its real position and id, and shown at once', async () => {
+    await watch();
+    usePlayerStore.getState().removeFromQueue(2);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(api.sendCommand).toHaveBeenCalledWith(ME, 'queue_remove', undefined, OTHER, { index: 2, songId: 'c' });
+    expect(connectState().remoteQueue?.songs.map((s) => s.id)).toEqual(['a', 'b', 'd']);
+  });
+
+  it('a library that dropped some ids: edits use the real positions, not the shown ones', async () => {
+    vi.mocked(api.fetchQueue).mockResolvedValue(queueOf(['a', 'c', 'd'], 1, { positions: [0, 2, 3] }));
+    await watch();
+
+    usePlayerStore.getState().removeFromQueue(1); // "c" is shown 2nd but sits at real position 2
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.sendCommand).toHaveBeenCalledWith(ME, 'queue_remove', undefined, OTHER, { index: 2, songId: 'c' });
+  });
+
+  it('reordering is sent from/to in real positions and shown at once', async () => {
+    await watch();
+    usePlayerStore.getState().reorderQueue(0, 3);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(api.sendCommand).toHaveBeenCalledWith(ME, 'queue_move', undefined, OTHER, { index: 0, to: 3, songId: 'a' });
+    expect(connectState().remoteQueue?.songs.map((s) => s.id)).toEqual(['b', 'c', 'd', 'a']);
+    expect(connectState().remoteQueue?.index).toBe(0); // the playing "b" moved up with the list
+  });
+
+  it('playing a queue item jumps there on the other device', async () => {
+    await watch();
+    connectState().playRemoteQueueItem(3);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.sendCommand).toHaveBeenCalledWith(ME, 'queue_play', undefined, OTHER, { index: 3, songId: 'd' });
+  });
+
+  it('edits nothing (and says nothing) when the queue has not been loaded or the index is stale', async () => {
+    usePlayerStore.getState().removeFromQueue(0); // not watching: no view
+    usePlayerStore.getState().reorderQueue(0, 1);
+    connectState().playRemoteQueueItem(0);
+    await watch();
+    vi.mocked(api.sendCommand).mockClear();
+    usePlayerStore.getState().removeFromQueue(9);
+    usePlayerStore.getState().reorderQueue(0, 9);
+    connectState().playRemoteQueueItem(9);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.sendCommand).not.toHaveBeenCalled();
+  });
+});
+
+describe('adding to the other device\'s queue', () => {
+  beforeEach(() => {
+    startOnline();
+    otherIsPlaying();
+  });
+
+  it('"add to queue" and "play next" reach the other device instead of this device\'s own queue', async () => {
+    usePlayerStore.getState().addToQueue(song('x'));
+    usePlayerStore.getState().playNext(song('y'));
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(api.sendCommand).toHaveBeenCalledWith(ME, 'queue_add', undefined, OTHER, { mode: 'end', songIds: ['x'] });
+    expect(api.sendCommand).toHaveBeenCalledWith(ME, 'queue_add', undefined, OTHER, { mode: 'next', songIds: ['y'] });
+    expect(usePlayerStore.getState().queue).toEqual([]); // this device's own queue stays empty (and it never starts reporting)
+    expect(api.reportState).not.toHaveBeenCalled();
+  });
+
+  it('an album\'s worth of "play next" calls (last song first) is one command, in listening order', async () => {
+    for (const id of ['s3', 's2', 's1']) usePlayerStore.getState().playNext(song(id));
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(api.sendCommand).toHaveBeenCalledTimes(1);
+    expect(api.sendCommand).toHaveBeenCalledWith(ME, 'queue_add', undefined, OTHER, { mode: 'next', songIds: ['s1', 's2', 's3'] });
+  });
+
+  it('adding at the end keeps the call order', async () => {
+    for (const id of ['s1', 's2', 's3']) usePlayerStore.getState().addToQueue(song(id));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(api.sendCommand).toHaveBeenCalledWith(ME, 'queue_add', undefined, OTHER, { mode: 'end', songIds: ['s1', 's2', 's3'] });
+  });
+
+  it('splits very large additions into commands the server accepts, the first block first in the queue', async () => {
+    const ids = Array.from({ length: 230 }, (_, i) => `s${i}`);
+    for (const id of ids) usePlayerStore.getState().addToQueue(song(id));
+    await vi.advanceTimersByTimeAsync(100);
+
+    const sent = vi.mocked(api.sendCommand).mock.calls.map((c) => (c[4] as { songIds: string[] }).songIds);
+    expect(sent.map((c) => c.length)).toEqual([100, 100, 30]);
+    expect(sent.flat()).toEqual(ids);
+
+    vi.mocked(api.sendCommand).mockClear();
+    for (const id of [...ids].reverse()) usePlayerStore.getState().playNext(song(id));
+    await vi.advanceTimersByTimeAsync(100);
+    const nextSent = vi.mocked(api.sendCommand).mock.calls.map((c) => (c[4] as { songIds: string[] }).songIds);
+    expect(nextSent.map((c) => c.length)).toEqual([30, 100, 100]); // last block goes first: each is inserted right after the current song
+    expect(nextSent[2]).toEqual(ids.slice(0, 100));
+  });
+
+  it('says where the songs went, once the other device has them', async () => {
+    usePlayerStore.getState().addToQueue(song('x'));
+    usePlayerStore.getState().addToQueue(song('y'));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(useToastStore.getState().message).toBe('Added 2 songs to the queue on Phone');
+
+    usePlayerStore.getState().playNext(song('z'));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(useToastStore.getState().message).toBe('1 song will play next on Phone');
+  });
+
+  it('does not claim success when the command was not delivered', async () => {
+    vi.mocked(api.sendCommand).mockResolvedValue('no_active_device');
+    usePlayerStore.getState().addToQueue(song('x'));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(useToastStore.getState().message).toMatch(/isn't reachable/);
+  });
+});
+
+describe('queue commands executed on this device', () => {
+  const cmd = (type: string, over: Record<string, unknown> = {}) => ({
+    commandId: `q-${Math.random()}`, type, expiresAtMs: Date.now() + 5_000, ...over,
+  });
+  const ids = () => usePlayerStore.getState().queue.map((s) => s.id);
+
+  beforeEach(() => {
+    startOnline();
+    usePlayerStore.setState({ queue: ['a', 'b', 'c', 'd'].map((id) => song(id)), queueIndex: 1, currentSong: song('b'), playing: true });
+  });
+
+  it('queue_add: "end" appends, "next" inserts the block right after the current song in order', () => {
+    handle('command', cmd('queue_add', { mode: 'end', songs: [song('x'), song('y')] }));
+    expect(ids()).toEqual(['a', 'b', 'c', 'd', 'x', 'y']);
+
+    handle('command', cmd('queue_add', { mode: 'next', songs: [song('n1'), song('n2')] }));
+    expect(ids()).toEqual(['a', 'b', 'n1', 'n2', 'c', 'd', 'x', 'y']);
+    expect(usePlayerStore.getState().queueIndex).toBe(1);
+  });
+
+  it('queue_add ignores junk and an unknown mode', () => {
+    handle('command', cmd('queue_add', { mode: 'end', songs: [null, { title: 'no id' }, song('ok')] }));
+    expect(ids()).toEqual(['a', 'b', 'c', 'd', 'ok']);
+    handle('command', cmd('queue_add', { mode: 'sideways', songs: [song('no')] }));
+    expect(ids()).not.toContain('no');
+  });
+
+  it('queue_remove removes the named song', () => {
+    handle('command', cmd('queue_remove', { index: 3, songId: 'd' }));
+    expect(ids()).toEqual(['a', 'b', 'c']);
+  });
+
+  it('queue_remove is dropped when the song at that index is not the one the sender saw', () => {
+    handle('command', cmd('queue_remove', { index: 3, songId: 'c' }));
+    expect(ids()).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('queue_remove never removes the song that is playing', () => {
+    handle('command', cmd('queue_remove', { index: 1, songId: 'b' }));
+    expect(ids()).toEqual(['a', 'b', 'c', 'd']);
+    expect(usePlayerStore.getState().playing).toBe(true);
+  });
+
+  it('queue_move moves the named song and keeps the current one playing', () => {
+    handle('command', cmd('queue_move', { index: 0, to: 3, songId: 'a' }));
+    expect(ids()).toEqual(['b', 'c', 'd', 'a']);
+    expect(usePlayerStore.getState().queue[usePlayerStore.getState().queueIndex].id).toBe('b');
+  });
+
+  it('queue_move is dropped for a stale index or a destination outside the queue', () => {
+    handle('command', cmd('queue_move', { index: 0, to: 3, songId: 'zzz' }));
+    handle('command', cmd('queue_move', { index: 0, to: 9, songId: 'a' }));
+    handle('command', cmd('queue_move', { index: 0, to: -1, songId: 'a' }));
+    expect(ids()).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('queue_play jumps to the named song without disturbing the queue order', () => {
+    usePlayerStore.setState({ shuffle: true, originalQueue: ['a', 'b', 'c', 'd'].map((id) => song(id)) });
+    handle('command', cmd('queue_play', { index: 3, songId: 'd' }));
+    expect(usePlayerStore.getState().queueIndex).toBe(3);
+    expect(usePlayerStore.getState().currentSong?.id).toBe('d');
+    expect(ids()).toEqual(['a', 'b', 'c', 'd']);
+    expect(usePlayerStore.getState().originalQueue).toHaveLength(4);
+  });
+
+  it('queue_play is dropped for a stale index', () => {
+    handle('command', cmd('queue_play', { index: 3, songId: 'a' }));
+    handle('command', cmd('queue_play', { index: 9, songId: 'd' }));
+    expect(usePlayerStore.getState().queueIndex).toBe(1);
+  });
+
+  it('the edited queue is reported, so the other devices see the new version', async () => {
+    handle('command', cmd('queue_add', { mode: 'end', songs: [song('x')] }));
+    await vi.advanceTimersByTimeAsync(250);
+    expect(api.reportState).toHaveBeenLastCalledWith(expect.objectContaining({ queueIds: ['a', 'b', 'c', 'd', 'x'] }));
   });
 });

@@ -14,7 +14,9 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { useEffect } from 'react';
 import { usePlayerStore } from '../store/player';
+import { useConnectStore } from '../store/connect';
 import { CoverArt } from '../components/CoverArt';
 import { resolveDragReorderIndices } from '../lib/dragReorder';
 import type { Song } from '../api/types';
@@ -30,11 +32,13 @@ interface QueueItemProps {
   song: Song;
   index: number;
   isCurrent: boolean;
+  /** Removing the song that is playing on another device would stop it there, so that isn't offered. */
+  canRemove?: boolean;
   onRemove: () => void;
   onPlay: () => void;
 }
 
-function QueueItem({ song, index, isCurrent, onRemove, onPlay }: QueueItemProps) {
+function QueueItem({ song, index, isCurrent, canRemove = true, onRemove, onPlay }: QueueItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `${song.id}-${index}`,
   });
@@ -79,7 +83,7 @@ function QueueItem({ song, index, isCurrent, onRemove, onPlay }: QueueItemProps)
 
       <span className="text-xs text-zinc-500 flex-shrink-0">{formatDuration(song.duration)}</span>
 
-      <button
+      {canRemove && <button
         onClick={onRemove}
         title="Remove"
         className="text-zinc-600 hover:text-red-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -87,14 +91,24 @@ function QueueItem({ song, index, isCurrent, onRemove, onPlay }: QueueItemProps)
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
         </svg>
-      </button>
+      </button>}
     </div>
   );
 }
 
 export function QueuePage() {
-  const queue = usePlayerStore((s) => s.queue);
-  const queueIndex = usePlayerStore((s) => s.queueIndex);
+  const localQueue = usePlayerStore((s) => s.queue);
+  const localIndex = usePlayerStore((s) => s.queueIndex);
+  // While another device is the one playing, this page shows and edits *its* queue.
+  const remoteActive = useConnectStore((s) => s.status === 'online' && s.activeDeviceId !== null && s.activeDeviceId !== s.deviceId);
+  const remoteQueue = useConnectStore((s) => s.remoteQueue);
+  const remoteDevice = useConnectStore((s) => s.devices.find((d) => d.id === s.activeDeviceId));
+  const watchRemoteQueue = useConnectStore((s) => s.watchRemoteQueue);
+  const playRemoteQueueItem = useConnectStore((s) => s.playRemoteQueueItem);
+  useEffect(() => (remoteActive ? watchRemoteQueue() : undefined), [remoteActive, watchRemoteQueue]);
+
+  const queue = remoteActive ? (remoteQueue?.songs ?? []) : localQueue;
+  const queueIndex = remoteActive ? (remoteQueue?.index ?? -1) : localIndex;
   const reorderQueue = usePlayerStore((s) => s.reorderQueue);
   const removeFromQueue = usePlayerStore((s) => s.removeFromQueue);
   const clearQueue = usePlayerStore((s) => s.clearQueue);
@@ -116,8 +130,11 @@ export function QueuePage() {
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">Queue</h1>
-        {queue.length > 0 && (
+        <div>
+          <h1 className="text-2xl font-bold text-white">Queue</h1>
+          {remoteActive && remoteDevice && <p className="text-xs text-brand">On {remoteDevice.name}</p>}
+        </div>
+        {queue.length > 0 && !remoteActive && (
           <button
             onClick={clearQueue}
             className="text-sm text-zinc-400 hover:text-red-400 transition-colors"
@@ -128,7 +145,9 @@ export function QueuePage() {
       </div>
 
       {queue.length === 0 ? (
-        <p className="text-zinc-400 text-sm">The queue is empty. Double-click a song to start playing.</p>
+        <p className="text-zinc-400 text-sm">
+          {remoteActive && !remoteQueue ? 'Loading the queue…' : 'The queue is empty. Double-click a song to start playing.'}
+        </p>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
@@ -139,8 +158,9 @@ export function QueuePage() {
                   song={song}
                   index={i}
                   isCurrent={i === queueIndex}
+                  canRemove={!(remoteActive && i === queueIndex)}
                   onRemove={() => removeFromQueue(i)}
-                  onPlay={() => playQueue(queue, i)}
+                  onPlay={() => (remoteActive ? playRemoteQueueItem(i) : playQueue(queue, i))}
                 />
               ))}
             </div>

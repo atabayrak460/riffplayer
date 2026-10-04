@@ -240,13 +240,25 @@ describe('PlayerBar with Connect', () => {
     expect(volume()).toBeEnabled();
   });
 
-  it('while another device plays: says so under the track, and disables the volume slider with an explanation', () => {
+  it('while another device plays: says so under the track, and the volume slider shows and drives that device\'s volume', () => {
     useConnectStore.setState({ status: 'online', deviceId: ME, devices, activeDeviceId: PHONE });
+    usePlayerStore.setState({ volume: 0.9 });
+    useConnectStore.setState({ remote: { volume: 0.25 } as never });
     renderBar();
 
     expect(screen.getAllByText('Playing on Pixel').length).toBeGreaterThan(0);
+    expect(volume()).toBeEnabled();
+    expect(volume().value).toBe('0.25');
+    expect(volume().title).toMatch(/device that is playing/i);
+  });
+
+  it('disables the volume slider when the playing device is unreachable', () => {
+    useConnectStore.setState({
+      status: 'online', deviceId: ME, activeDeviceId: PHONE,
+      devices: devices.map((d) => (d.id === PHONE ? { ...d, online: false, unreachable: true } : d)),
+    });
+    renderBar();
     expect(volume()).toBeDisabled();
-    expect(volume().title).toMatch(/other device/i);
   });
 
   it('has no picker at all against a server without Connect', () => {

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { usePlayerStore } from '../store/player';
+import { usePlayerStore, effectiveVolume } from '../store/player';
 import { useUiMenuStore } from '../store/uiMenu';
 import { handleKeyboardShortcut } from './keyboard';
 
@@ -18,7 +18,7 @@ export function useGlobalShortcuts(setShowShortcutsHelp: (updater: (v: boolean) 
       const handled = handleKeyboardShortcut(e, {
         currentTime: s.currentTime,
         duration: s.duration,
-        volume: s.volume,
+        volume: effectiveVolume(),
         togglePlay: s.togglePlay,
         seek: s.seek,
         setVolume: s.setVolume,

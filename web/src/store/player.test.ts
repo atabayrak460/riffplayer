@@ -77,7 +77,7 @@ vi.mock('../api/subsonic', async (importOriginal) => ({
   scrobble: vi.fn().mockResolvedValue(undefined),
 }));
 
-const { usePlayerStore, remote, currentPlayCounted } = await import('./player');
+const { usePlayerStore, remote, currentPlayCounted, effectiveVolume } = await import('./player');
 const { useDownloadsStore } = await import('./downloads');
 const { scrobble } = await import('../api/subsonic');
 
@@ -567,14 +567,18 @@ describe('loadAndPlay race conditions (#35 / #36)', () => {
 
 describe('remote control hook (Connect)', () => {
   const command = vi.fn();
+  const setVolume = vi.fn();
+  const queueAdd = vi.fn();
+  const queueRemove = vi.fn();
+  const queueMove = vi.fn();
   let isRemote = true;
 
   beforeEach(() => {
     FakeAudio.rejectPlay = false;
     useDownloadsStore.setState({ status: {} });
-    command.mockClear();
+    [command, setVolume, queueAdd, queueRemove, queueMove].forEach((m) => m.mockClear());
     isRemote = true;
-    remote.current = { isRemote: () => isRemote, command };
+    remote.current = { isRemote: () => isRemote, command, setVolume, volume: () => 0.5, queueAdd, queueRemove, queueMove };
     FakeAudio.instance.paused = true;
     FakeAudio.instance.currentTime = 0;
   });
@@ -610,6 +614,74 @@ describe('remote control hook (Connect)', () => {
     expect(command).toHaveBeenCalledWith('seek', 42_500);
     expect(usePlayerStore.getState().currentTime).toBe(42.5);
     expect(FakeAudio.instance.currentTime).toBe(0);
+  });
+
+  it('volume and mute drive the other device and leave this device\'s audio alone', () => {
+    usePlayerStore.setState({ volume: 0.9 });
+    FakeAudio.instance.volume = 0.9;
+
+    usePlayerStore.getState().setVolume(0.2);
+    expect(setVolume).toHaveBeenLastCalledWith(0.2);
+    expect(usePlayerStore.getState().volume).toBe(0.9);
+    expect(FakeAudio.instance.volume).toBe(0.9);
+
+    usePlayerStore.getState().toggleMute(); // the other device is at 0.5 (see the stub)
+    expect(setVolume).toHaveBeenLastCalledWith(0);
+    expect(FakeAudio.instance.volume).toBe(0.9);
+  });
+
+  it('effectiveVolume is the other device\'s while remote and this device\'s otherwise', () => {
+    usePlayerStore.setState({ volume: 0.9 });
+    expect(effectiveVolume()).toBe(0.5);
+    isRemote = false;
+    expect(effectiveVolume()).toBe(0.9);
+  });
+
+  it('play next, add to queue, remove and reorder go to the other device, not this device\'s queue', () => {
+    const a = song('r-a');
+    const b = song('r-b');
+    usePlayerStore.setState({ queue: [], queueIndex: -1 });
+
+    usePlayerStore.getState().playNext(a);
+    usePlayerStore.getState().addToQueue(b);
+    usePlayerStore.getState().removeFromQueue(2);
+    usePlayerStore.getState().reorderQueue(1, 3);
+
+    expect(queueAdd.mock.calls).toEqual([[a, 'next'], [b, 'end']]);
+    expect(queueRemove).toHaveBeenCalledWith(2);
+    expect(queueMove).toHaveBeenCalledWith(1, 3);
+    expect(usePlayerStore.getState().queue).toEqual([]);
+  });
+
+  it('volume and queue edits act locally as usual when this device is the player', () => {
+    isRemote = false;
+    const a = song('r-a');
+    const b = song('r-b');
+    usePlayerStore.setState({ queue: [a], queueIndex: 0, currentSong: a });
+
+    usePlayerStore.getState().setVolume(0.3);
+    usePlayerStore.getState().addToQueue(b);
+    usePlayerStore.getState().playNext(song('r-c'));
+
+    expect(setVolume).not.toHaveBeenCalled();
+    expect(queueAdd).not.toHaveBeenCalled();
+    expect(usePlayerStore.getState().volume).toBe(0.3);
+    expect(usePlayerStore.getState().queue.map((s) => s.id)).toEqual(['r-a', 'r-c', 'r-b']);
+  });
+
+  it('jumpTo plays a song of the queue and leaves the queue and its shuffle backup alone', () => {
+    const q = ['j-a', 'j-b', 'j-c'].map((id) => song(id));
+    usePlayerStore.setState({ queue: q, queueIndex: 0, currentSong: q[0], shuffle: true, originalQueue: [...q].reverse(), repeatMode: 'one' });
+
+    usePlayerStore.getState().jumpTo(2);
+    expect(usePlayerStore.getState().currentSong?.id).toBe('j-c');
+    expect(usePlayerStore.getState().queueIndex).toBe(2);
+    expect(usePlayerStore.getState().queue).toBe(q);
+    expect(usePlayerStore.getState().originalQueue?.map((s) => s.id)).toEqual(['j-c', 'j-b', 'j-a']);
+    expect(usePlayerStore.getState().repeatMode).toBe('off'); // picking a track drops repeat-one, like every manual pick
+
+    usePlayerStore.getState().jumpTo(9);
+    expect(usePlayerStore.getState().queueIndex).toBe(2);
   });
 
   it('acts locally as usual when this device is not just a remote', () => {
