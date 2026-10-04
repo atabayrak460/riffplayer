@@ -7,6 +7,8 @@ import 'package:just_audio/just_audio.dart';
 import '../api/subsonic.dart';
 import '../api/types.dart';
 import '../providers/providers.dart';
+import '../providers/theme_provider.dart';
+import '../theme.dart';
 import '../utils/snackbar.dart';
 import '../widgets/cover_art.dart';
 import '../widgets/lyrics_view.dart';
@@ -543,7 +545,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       onPointerCancel: _onPointerEnd,
       child: Transform.translate(
         offset: Offset(0, _dismissDy),
-        child: scaffold,
+        // Vista's scaffolds are see-through (the app paints a backdrop behind them), and this route is
+        // non-opaque — so give the player its own backdrop or the page underneath shows through.
+        child: SkinBackdrop(skin: ref.watch(skinProvider), child: scaffold),
       ),
     );
   }

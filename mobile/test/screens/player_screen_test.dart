@@ -1,4 +1,7 @@
 import 'package:riffplayer_mobile/api/types.dart';
+import 'package:riffplayer_mobile/app_colors.dart';
+import 'package:riffplayer_mobile/providers/theme_provider.dart';
+import 'package:riffplayer_mobile/theme.dart';
 import 'package:riffplayer_mobile/providers/providers.dart';
 import 'package:riffplayer_mobile/screens/player_screen.dart';
 import 'package:flutter/material.dart';
@@ -51,7 +54,8 @@ void main() {
         .thenAnswer((_) async {});
   });
 
-  Future<void> pumpPlayer(WidgetTester tester) async {
+  Future<void> pumpPlayer(WidgetTester tester,
+      {AppSkin skin = AppSkin.standard}) async {
     // Phone-sized: on the default 800x600 surface the title is below the fold.
     tester.view.physicalSize = const Size(400, 900);
     tester.view.devicePixelRatio = 1;
@@ -82,8 +86,12 @@ void main() {
           playerProvider.overrideWith((ref) => notifier),
           apiClientProvider.overrideWithValue(client),
           downloadServiceProvider.overrideWithValue(downloads),
+          skinProvider.overrideWith((ref) => SkinNotifier()..state = skin),
         ],
-        child: MaterialApp.router(routerConfig: router),
+        child: MaterialApp.router(
+          routerConfig: router,
+          theme: buildTheme(AppColors.current, skin),
+        ),
       ),
     );
     await tester.tap(find.text('open player'));
@@ -141,5 +149,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Title a'), findsOneWidget);
+  });
+
+  testWidgets(
+      "Vista's player paints its own backdrop, so the page under it cannot show through",
+      (tester) async {
+    await pumpPlayer(tester, skin: AppSkin.vista);
+    expect(
+        find.descendant(
+            of: find.byType(PlayerScreen), matching: find.byType(SkinBackdrop)),
+        findsOneWidget);
   });
 }
