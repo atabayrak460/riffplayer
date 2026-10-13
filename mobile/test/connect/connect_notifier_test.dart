@@ -223,7 +223,8 @@ class Harness {
     when(() => handler.skipToNext()).thenAnswer((_) async {});
     when(() => handler.skipToPrevious()).thenAnswer((_) async {});
     when(() => handler.setLoopMode(any())).thenAnswer((_) async {});
-    when(() => handler.setShuffleModeEnabled(any())).thenAnswer((_) async {});
+    when(() => handler.setShuffleModeEnabled(any()))
+        .thenAnswer((_) async => null);
     when(() => handler.setUserVolume(any())).thenAnswer((_) async {});
     when(() => handler.playQueue(any(), any(),
         position: any(named: 'position'),
@@ -813,7 +814,8 @@ void main() {
       h.tick();
 
       verify(() => h.handler.setLoopMode(LoopMode.all)).called(1);
-      verify(() => h.handler.setShuffleModeEnabled(true)).called(1);
+      verify(() => h.handler.applyShuffleFlag(true)).called(1);
+      verifyNever(() => h.handler.setShuffleModeEnabled(any()));
       verify(() => h.handler.playQueue(any(), 1,
           position: const Duration(seconds: 83), autoplay: true)).called(1);
       expect(h.player.state.queue.map((s) => s.id), ['a', 'b', 'c']);

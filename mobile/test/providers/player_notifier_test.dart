@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:riffplayer_mobile/api/types.dart';
 import 'package:riffplayer_mobile/connect/connect_models.dart' show CommandType;
@@ -85,7 +86,8 @@ void main() {
     when(() => handler.playFromIndex(any())).thenAnswer((_) async {});
     when(() => handler.playQueue(any(), any())).thenAnswer((_) async {});
     when(() => handler.setLoopMode(any())).thenAnswer((_) async {});
-    when(() => handler.setShuffleModeEnabled(any())).thenAnswer((_) async {});
+    when(() => handler.setShuffleModeEnabled(any()))
+        .thenAnswer((_) async => null);
     when(() => handler.skipToNext()).thenAnswer((_) async {});
     when(() => handler.skipToPrevious()).thenAnswer((_) async {});
 
@@ -344,8 +346,8 @@ void main() {
       verify(() => handler.skipToPrevious()).called(1);
     });
 
-    test('toggleShuffle() flips the current shuffle state', () {
-      notifier.toggleShuffle();
+    test('toggleShuffle() flips the current shuffle state', () async {
+      await notifier.toggleShuffle();
       verify(() => handler.setShuffleModeEnabled(true)).called(1);
     });
   });
@@ -1042,7 +1044,92 @@ void main() {
       await notifier.applyModes(repeat: LoopMode.one, shuffle: true);
 
       verify(() => handler.setLoopMode(LoopMode.one)).called(1);
-      verify(() => handler.setShuffleModeEnabled(true)).called(1);
+      verify(() => handler.applyShuffleFlag(true)).called(1);
+      verifyNever(() => handler.setShuffleModeEnabled(any()));
+    });
+  });
+
+  group('shuffle', () {
+    late StreamController<bool> shuffleStream;
+    late PlayerNotifier shuffled;
+
+    setUp(() {
+      shuffleStream = StreamController<bool>.broadcast();
+      addTearDown(shuffleStream.close);
+      when(() => handler.shuffleModeEnabledStream)
+          .thenAnswer((_) => shuffleStream.stream);
+      when(() => handler.playQueue(any(), any(),
+          originalTags: any(named: 'originalTags'))).thenAnswer((_) async {});
+      shuffled = PlayerNotifier(handler, random: Random(4));
+    });
+
+    test('toggleShuffle reorders the queue state like the player did',
+        () async {
+      await shuffled.playSong(_song('a'), client, downloads,
+          queue: [for (final id in 'abcde'.split('')) _song(id)]);
+      // The player reports it reordered the upcoming songs as a, d, b, e, c.
+      when(() => handler.setShuffleModeEnabled(true))
+          .thenAnswer((_) async => [0, 3, 1, 4, 2]);
+
+      await shuffled.toggleShuffle();
+
+      expect(shuffled.state.queue.map((s) => s.id), ['a', 'd', 'b', 'e', 'c']);
+      expect(shuffled.state.currentIndex, 0);
+    });
+
+    test(
+        'toggleShuffle leaves the queue alone when the player did not change it',
+        () async {
+      await shuffled.playSong(_song('a'), client, downloads,
+          queue: [_song('a'), _song('b')]);
+
+      await shuffled.toggleShuffle();
+
+      expect(shuffled.state.queue.map((s) => s.id), ['a', 'b']);
+    });
+
+    test('a queue played with shuffle on is shuffled, tapped song first',
+        () async {
+      shuffleStream.add(true);
+      await Future<void>.delayed(Duration.zero);
+      final songs = [for (var i = 0; i < 12; i++) _song('s$i')];
+
+      await shuffled.playSong(songs[5], client, downloads,
+          queue: songs, queueIndex: 5);
+
+      final ids = shuffled.state.queue.map((s) => s.id).toList();
+      expect(ids.first, 's5');
+      expect(ids.toSet(), songs.map((s) => s.id).toSet());
+      expect(ids, isNot(songs.map((s) => s.id).toList()));
+      expect(shuffled.state.currentIndex, 0);
+      // The player is told the original order so it can be restored later.
+      final captured = verify(() => handler.playQueue(any(), 0,
+              originalTags: captureAny(named: 'originalTags'))).captured.single
+          as List<Object?>;
+      expect(captured.length, 12);
+    });
+
+    test('with shuffle off the queue keeps its order', () async {
+      final songs = [for (var i = 0; i < 12; i++) _song('s$i')];
+
+      await shuffled.playSong(songs[5], client, downloads,
+          queue: songs, queueIndex: 5);
+
+      expect(shuffled.state.queue.map((s) => s.id), songs.map((s) => s.id));
+      expect(shuffled.state.currentIndex, 5);
+    });
+
+    test('a song added while shuffled goes right after the current one',
+        () async {
+      shuffleStream.add(true);
+      await Future<void>.delayed(Duration.zero);
+      final songs = [for (var i = 0; i < 6; i++) _song('s$i')];
+      await shuffled.playSong(songs[0], client, downloads, queue: songs);
+
+      await shuffled.addToQueue(_song('new'), client, downloads);
+
+      expect(shuffled.state.queue[1].id, 'new');
+      verify(() => handler.insertAt(1, any())).called(1);
     });
   });
 }

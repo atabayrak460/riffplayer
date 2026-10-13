@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import '../api/types.dart';
@@ -6,6 +7,7 @@ import '../api/subsonic.dart';
 import '../services/auth_service.dart';
 import '../services/download_service.dart';
 import '../audio/audio_handler.dart';
+import '../audio/shuffle_order.dart';
 import '../connect/connect_models.dart' show CommandType;
 import '../connect/remote_controller.dart';
 
@@ -140,6 +142,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   // runs; once that covers the rest of the track plus the threshold into the
   // next pass, it counts as another play.
   final DateTime Function() _now;
+  final Random _random;
 
   /// Set by RiffPlayer Connect: while another device is playing, the transport actions below become
   /// remote commands instead of driving the local player.
@@ -177,8 +180,9 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     return result;
   }
 
-  PlayerNotifier(this._handler, {DateTime Function()? now})
+  PlayerNotifier(this._handler, {DateTime Function()? now, Random? random})
       : _now = now ?? DateTime.now,
+        _random = random ?? Random(),
         super(const PlayerState()) {
     _handler.positionStream.listen((pos) {
       if (_remoteMirror) return;
@@ -226,13 +230,24 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   }) async {
     // Starting something here while another device plays is a takeover (Connect).
     remote?.onLocalStart();
-    final songs = queue ?? [song];
+    var songs = queue ?? [song];
     final idx = queueIndex ?? songs.indexWhere((s) => s.id == song.id);
-    final resolvedIndex = idx < 0 ? 0 : idx;
+    var resolvedIndex = idx < 0 ? 0 : idx;
 
-    final sources = await Future.wait(
+    var sources = await Future.wait(
       songs.map((s) => buildAudioSource(s, client, downloads)),
     );
+
+    // With shuffle on, the queue itself is shuffled (the tapped song first) so
+    // the queue screen shows the order that really plays.
+    List<Object?>? originalTags;
+    if (state.shuffle && songs.length > 1) {
+      originalTags = sources.map(sourceTag).toList();
+      final perm = shuffleFirst(songs.length, resolvedIndex, _random);
+      songs = applyPermutation(songs, perm);
+      sources = applyPermutation(sources, perm);
+      resolvedIndex = 0;
+    }
 
     // Update the UI-facing state (and fire the scrobble) before waiting on
     // playback to actually start, not after — `_handler.playQueue()` awaits
@@ -249,7 +264,12 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     _listenedSinceSubmitMs = 0;
     client.scrobble(song.id, submission: false).ignore();
 
-    await _handler.playQueue(sources, resolvedIndex);
+    if (originalTags == null) {
+      await _handler.playQueue(sources, resolvedIndex);
+    } else {
+      await _handler.playQueue(sources, resolvedIndex,
+          originalTags: originalTags);
+    }
   }
 
   void _maybeScrobble(Duration pos) {
@@ -533,7 +553,8 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   Future<void> applyModes(
       {required LoopMode repeat, required bool shuffle}) async {
     await _handler.setLoopMode(repeat);
-    await _handler.setShuffleModeEnabled(shuffle);
+    // Flag only: the queue that follows is loaded in the order it plays.
+    _handler.applyShuffleFlag(shuffle);
   }
 
   /// Whether the track now loaded has already been counted as a play (scrobbled) — handed to the
@@ -577,7 +598,15 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     await _handler.playQueue(sources, i, position: position, autoplay: play);
   }
 
-  void toggleShuffle() => _handler.setShuffleModeEnabled(!state.shuffle);
+  /// Switches shuffle on/off. The songs after the current one are reordered —
+  /// in the player and in [PlayerState.queue] — so the queue screen always
+  /// shows the real play order; switching off restores their original order.
+  Future<void> toggleShuffle() => _serializeQueueOp(() async {
+        final perm = await _handler.setShuffleModeEnabled(!state.shuffle);
+        _queuedCount = 0;
+        if (perm == null || perm.length != state.queue.length) return;
+        state = state.copyWith(queue: applyPermutation(state.queue, perm));
+      });
 
   /// Cycles off → all → one → off, same order as the web client.
   void toggleRepeat() {

@@ -1,10 +1,17 @@
+import 'dart:async';
+import 'dart:io' show Platform;
+import 'dart:math';
+
 import 'package:audio_service/audio_service.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 import '../api/types.dart';
 import '../api/subsonic.dart';
 import '../services/download_service.dart';
 import 'equalizer_model.dart';
+import 'interruption_policy.dart';
 import 'replay_gain.dart';
+import 'shuffle_order.dart';
 
 /// Converts a [Song] into a [MediaItem] for lock-screen / notification
 /// display. Prefers [localCoverPath] (a downloaded track's on-disk cover)
@@ -57,13 +64,24 @@ Future<AudioSource> buildAudioSource(
   );
 }
 
+/// The tag (our [MediaItem]) of a queue entry — what identifies it, by identity,
+/// when the original order is restored after shuffling.
+Object? sourceTag(AudioSource source) =>
+    source is IndexedAudioSource ? source.tag : null;
+
 class RiffPlayerAudioHandler extends BaseAudioHandler
     with QueueHandler, SeekHandler {
   // Android's built-in equalizer (the effect is a no-op on other platforms).
   final AndroidEqualizer _equalizer = AndroidEqualizer();
+  // Audio-focus interruptions are handled below (see [InterruptionPolicy]),
+  // not by just_audio, which can't resume after a permanent focus loss.
   late final AudioPlayer _player = AudioPlayer(
+    handleInterruptions: false,
     audioPipeline: AudioPipeline(androidAudioEffects: [_equalizer]),
   );
+  final InterruptionPolicy _interruptions;
+  Timer? _interruptionPoll;
+  bool _ducked = false;
   ConcatenatingAudioSource? _queue;
 
   // The player's output volume is the user's volume (RiffPlayer Connect lets another device set it) times
@@ -78,7 +96,21 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
   double? _trackGainDb;
   double? _albumGainDb;
 
-  RiffPlayerAudioHandler() {
+  final Random _random;
+
+  // Shuffle is done by reordering the queue itself (see shuffle_order.dart);
+  // just_audio's own shuffle mode is never switched on.
+  bool _shuffle = false;
+  final _shuffleController = StreamController<bool>.broadcast();
+
+  // While shuffled: the queue's entries (their tags) in the order they had
+  // before shuffling, so switching shuffle off can put the upcoming songs back.
+  List<Object?>? _original;
+
+  RiffPlayerAudioHandler({Random? random, InterruptionPolicy? interruptions})
+      : _random = random ?? Random(),
+        _interruptions = interruptions ?? InterruptionPolicy() {
+    _listenForInterruptions();
     // Forward playback state to audio_service
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
 
@@ -103,6 +135,11 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
     });
   }
 
+  // Another app asked us to lower the volume while it speaks/plays briefly.
+  static const _duckFactor = 0.3;
+  double get _outputVolume =>
+      _userVolume * _gain * (_ducked ? _duckFactor : 1.0);
+
   void _applyGain() {
     _gain = replayGainVolume(
       mode: _rgMode,
@@ -110,7 +147,7 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
       albumGainDb: _albumGainDb,
       preampDb: _preampDb,
     );
-    _player.setVolume(_userVolume * _gain);
+    _player.setVolume(_outputVolume);
   }
 
   /// Applies new ReplayGain settings to the track that is playing right now.
@@ -128,7 +165,59 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
 
   Future<void> setUserVolume(double volume) {
     _userVolume = volume.clamp(0.0, 1.0);
-    return _player.setVolume(_userVolume * _gain);
+    return _player.setVolume(_outputVolume);
+  }
+
+  // ── Audio focus ─────────────────────────────────────────────────────────────
+
+  void _listenForInterruptions() {
+    AudioSession.instance.then((session) {
+      session.becomingNoisyEventStream.listen((_) {
+        _interruptions.userAction();
+        _player.pause();
+      });
+      session.interruptionEventStream.listen((event) {
+        final action = event.begin
+            ? _interruptions.begin(event.type,
+                playing: _player.playing, now: DateTime.now())
+            : _interruptions.end(event.type);
+        _perform(action);
+        _updateInterruptionPoll();
+      });
+    });
+  }
+
+  void _perform(InterruptionAction action) {
+    switch (action) {
+      case InterruptionAction.none:
+        break;
+      case InterruptionAction.pause:
+        _player.pause();
+      case InterruptionAction.resume:
+        _player.play();
+      case InterruptionAction.duck:
+        _ducked = true;
+        _player.setVolume(_outputVolume);
+      case InterruptionAction.unduck:
+        _ducked = false;
+        _player.setVolume(_outputVolume);
+    }
+  }
+
+  // After a permanent focus loss there is no "focus is back" event; look at
+  // whether the other app is still playing until it stops (Android only).
+  void _updateInterruptionPoll() {
+    if (!_interruptions.watching || !Platform.isAndroid) {
+      _interruptionPoll?.cancel();
+      _interruptionPoll = null;
+      return;
+    }
+    _interruptionPoll ??= Timer.periodic(const Duration(seconds: 2), (_) async {
+      final active = await AndroidAudioManager().isMusicActive();
+      _perform(
+          _interruptions.poll(otherAudioActive: active, now: DateTime.now()));
+      _updateInterruptionPoll();
+    });
   }
 
   // ── Queue management ────────────────────────────────────────────────────────
@@ -140,7 +229,12 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
     int initialIndex, {
     Duration position = Duration.zero,
     bool autoplay = true,
+    List<Object?>? originalTags,
   }) async {
+    // [originalTags]: the entries' tags in the order they had before the caller
+    // shuffled [sources] (only meaningful with shuffle on).
+    _original =
+        _shuffle ? (originalTags ?? sources.map(sourceTag).toList()) : null;
     _queue = ConcatenatingAudioSource(children: sources);
     await _player.setAudioSource(
       _queue!,
@@ -156,31 +250,110 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
 
   /// Insert a track at [index] in the queue.
   Future<void> insertAt(int index, AudioSource source) async {
-    if (_queue == null) {
+    final queue = _queue;
+    if (queue == null) {
       await playQueue([source], 0);
       return;
     }
-    await _queue!.insert(index, source);
+    final predecessor = index > 0 && index <= queue.length
+        ? sourceTag(queue.children[index - 1])
+        : null;
+    await queue.insert(index, source);
+
+    final original = _original;
+    if (original != null) {
+      // Keeps the song where the user put it once shuffle is switched off.
+      final at = predecessor == null
+          ? -1
+          : original.indexWhere((t) => identical(t, predecessor));
+      original.insert(at + 1, sourceTag(source));
+    }
+
+    // Queue already finished: nothing would pick the new song up by itself.
+    if (_player.processingState == ProcessingState.completed &&
+        index > (_player.currentIndex ?? -1)) {
+      await _player.seek(Duration.zero, index: index);
+      await _player.play();
+    }
   }
 
   // ── Shuffle / repeat ─────────────────────────────────────────────────────────
-  // Delegated to just_audio's own shuffle/loop support rather than
-  // reimplementing queue reordering — it already pins the currently playing
-  // item and randomizes the rest, matching the web client's behavior.
 
-  Future<void> setShuffleModeEnabled(bool enabled) =>
-      _player.setShuffleModeEnabled(enabled);
+  /// Switches shuffle on or off, reordering the songs after the current one.
+  /// Returns the permutation applied to the queue (new item `i` was item
+  /// `perm[i]`) so the caller can reorder its own copy, or null when the queue
+  /// didn't change. The current song and everything before it never move.
+  Future<List<int>?> setShuffleModeEnabled(bool enabled) async {
+    if (enabled == _shuffle) return null;
+    _setShuffleFlag(enabled);
+
+    final queue = _queue;
+    final current = _player.currentIndex;
+    if (queue == null || current == null) {
+      _original = null;
+      return null;
+    }
+    final children = List.of(queue.children);
+    final tags = children.map(sourceTag).toList();
+    final List<int> perm;
+    if (enabled) {
+      _original = tags;
+      perm = shuffleUpcoming(children.length, current, _random);
+    } else {
+      final original = _original;
+      _original = null;
+      if (original == null) return null;
+      perm = restoreUpcoming(tags, current, original);
+    }
+    if (isIdentity(perm)) return null;
+
+    // Only what follows the current song is replaced, so playback and the
+    // current index are untouched.
+    final upcoming = [
+      for (var i = current + 1; i < perm.length; i++) children[perm[i]],
+    ];
+    await queue.removeRange(current + 1, children.length);
+    await queue.addAll(upcoming);
+    return perm;
+  }
+
+  /// Only records the mode, without touching the queue — used while a queue
+  /// handed over from another device is about to be loaded in its play order.
+  void applyShuffleFlag(bool enabled) => _setShuffleFlag(enabled);
+
+  void _setShuffleFlag(bool enabled) {
+    if (_shuffle == enabled) return;
+    _shuffle = enabled;
+    _shuffleController.add(enabled);
+    playbackState.add(playbackState.value.copyWith(
+      shuffleMode:
+          enabled ? AudioServiceShuffleMode.all : AudioServiceShuffleMode.none,
+    ));
+  }
 
   Future<void> setLoopMode(LoopMode mode) => _player.setLoopMode(mode);
 
-  Stream<bool> get shuffleModeEnabledStream => _player.shuffleModeEnabledStream;
+  Stream<bool> get shuffleModeEnabledStream => _shuffleController.stream;
   Stream<LoopMode> get loopModeStream => _player.loopModeStream;
-  bool get shuffleModeEnabled => _player.shuffleModeEnabled;
+  bool get shuffleModeEnabled => _shuffle;
   LoopMode get loopMode => _player.loopMode;
 
   @override
   Future<void> removeQueueItemAt(int index) async {
-    await _queue?.removeAt(index);
+    final queue = _queue;
+    if (queue == null) return;
+    _forget(queue.children.sublist(index, index + 1));
+    await queue.removeAt(index);
+  }
+
+  /// Drops [sources] from the remembered original order.
+  void _forget(Iterable<AudioSource> sources) {
+    final original = _original;
+    if (original == null) return;
+    for (final s in sources) {
+      final tag = sourceTag(s);
+      original.removeWhere((t) => identical(t, tag));
+    }
   }
 
   Future<void> moveQueueItem(int oldIndex, int newIndex) async {
@@ -188,6 +361,7 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
   }
 
   Future<void> clearQueue() async {
+    _original = null;
     await _queue?.clear();
     await _player.stop();
   }
@@ -200,6 +374,7 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
   Future<void> playFromIndex(int index) async {
     await _player.seek(Duration.zero, index: index);
     if (index > 0) {
+      _forget(_queue?.children.sublist(0, index) ?? const []);
       await _queue?.removeRange(0, index);
     }
   }
@@ -207,10 +382,18 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
   // ── AudioHandler overrides ──────────────────────────────────────────────────
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() {
+    _interruptions.userAction();
+    _updateInterruptionPoll();
+    return _player.play();
+  }
 
   @override
-  Future<void> pause() => _player.pause();
+  Future<void> pause() {
+    _interruptions.userAction();
+    _updateInterruptionPoll();
+    return _player.pause();
+  }
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);
@@ -231,9 +414,11 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
   Future<void> skipToQueueItem(int index) =>
       _player.seek(Duration.zero, index: index);
 
+  // Not offered to the system (no shuffle action in [systemActions]), and the
+  // app's own queue copy would not follow a reorder made from here — so
+  // shuffle is only ever switched through [PlayerNotifier.toggleShuffle].
   @override
-  Future<void> setShuffleMode(AudioServiceShuffleMode shuffleMode) =>
-      setShuffleModeEnabled(shuffleMode != AudioServiceShuffleMode.none);
+  Future<void> setShuffleMode(AudioServiceShuffleMode shuffleMode) async {}
 
   @override
   Future<void> setRepeatMode(AudioServiceRepeatMode repeatMode) =>
@@ -246,6 +431,8 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> stop() async {
+    _interruptions.userAction();
+    _updateInterruptionPoll();
     await _player.stop();
     await super.stop();
   }
@@ -281,7 +468,7 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
         bufferedPosition: _player.bufferedPosition,
         speed: _player.speed,
         queueIndex: event.currentIndex,
-        shuffleMode: _player.shuffleModeEnabled
+        shuffleMode: _shuffle
             ? AudioServiceShuffleMode.all
             : AudioServiceShuffleMode.none,
         repeatMode: const {
