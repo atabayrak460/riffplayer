@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:riffplayer_mobile/api/types.dart';
 import 'package:riffplayer_mobile/connect/connect_models.dart' show CommandType;
 import 'package:riffplayer_mobile/connect/remote_controller.dart';
 import 'package:riffplayer_mobile/providers/providers.dart';
+import 'package:riffplayer_mobile/services/stream_cache.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:mocktail/mocktail.dart';
@@ -1130,6 +1132,57 @@ void main() {
 
       expect(shuffled.state.queue[1].id, 'new');
       verify(() => handler.insertAt(1, any())).called(1);
+    });
+  });
+
+  group('stream cache', () {
+    late StreamController<int?> indexStream;
+    late Directory dir;
+    late StreamCache cache;
+
+    setUp(() {
+      indexStream = StreamController<int?>.broadcast();
+      addTearDown(indexStream.close);
+      when(() => handler.currentIndexStream)
+          .thenAnswer((_) => indexStream.stream);
+      dir = Directory.systemTemp.createTempSync('notifier_cache_test_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      cache = StreamCache(dir, maxBytes: 100);
+      for (var i = 0; i < 4; i++) {
+        cache.fileFor('s$i', 'mp3')
+          ..writeAsBytesSync(List.filled(60, 1))
+          ..setLastModifiedSync(
+              DateTime.now().subtract(Duration(minutes: 40 - i)));
+      }
+    });
+
+    test(
+        'keeps the song playing and the next one when trimming on a track change',
+        () async {
+      final n = PlayerNotifier(handler, cache: cache);
+      await n.playSong(_song('s0'), client, downloads,
+          queue: [for (var i = 0; i < 4; i++) _song('s$i')]);
+
+      indexStream.add(0);
+      bool has(String id) => cache.fileFor(id, 'mp3').existsSync();
+      // The trim runs in the background; wait for it rather than for a fixed time.
+      for (var i = 0; i < 100 && (has('s2') || has('s3')); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      expect([has('s0'), has('s1'), has('s2'), has('s3')],
+          [true, true, false, false]);
+    });
+
+    test('does nothing while the cache is off', () async {
+      cache.maxBytes = 0;
+      final n = PlayerNotifier(handler, cache: cache);
+      await n.playSong(_song('s0'), client, downloads,
+          queue: [for (var i = 0; i < 4; i++) _song('s$i')]);
+
+      indexStream.add(0);
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+
+      expect(dir.listSync(), hasLength(4));
     });
   });
 }

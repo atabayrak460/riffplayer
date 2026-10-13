@@ -8,6 +8,7 @@ import 'package:just_audio/just_audio.dart';
 import '../api/types.dart';
 import '../api/subsonic.dart';
 import '../services/download_service.dart';
+import '../services/stream_cache.dart';
 import 'equalizer_model.dart';
 import 'interruption_policy.dart';
 import 'replay_gain.dart';
@@ -49,19 +50,29 @@ MediaItem songToMediaItem(
 Future<AudioSource> buildAudioSource(
   Song song,
   SubsonicClient client,
-  DownloadService downloads,
-) async {
+  DownloadService downloads, {
+  StreamCache? cache,
+}) async {
   final localPath = await downloads.localPath(song.id);
   final localCoverPath =
       localPath != null ? await downloads.localCoverPath(song.id) : null;
-  final uri = localPath != null
-      ? Uri.file(localPath)
-      : Uri.parse(client.streamUrl(song.id));
+  final tag = songToMediaItem(song, client, localCoverPath: localCoverPath);
+  if (localPath != null) return AudioSource.uri(Uri.file(localPath), tag: tag);
 
-  return AudioSource.uri(
-    uri,
-    tag: songToMediaItem(song, client, localCoverPath: localCoverPath),
-  );
+  // Not downloaded. With the stream cache on, play the cached copy if there is
+  // one, otherwise stream it and keep a copy while it plays.
+  if (cache != null && cache.enabled) {
+    final cached = await cache.completeFile(song.id, song.suffix);
+    if (cached != null) return AudioSource.uri(Uri.file(cached.path), tag: tag);
+    await cache.directory.create(recursive: true);
+    // ignore: experimental_member_use
+    return LockCachingAudioSource(
+      Uri.parse(client.streamUrl(song.id)),
+      cacheFile: cache.fileFor(song.id, song.suffix),
+      tag: tag,
+    );
+  }
+  return AudioSource.uri(Uri.parse(client.streamUrl(song.id)), tag: tag);
 }
 
 /// The tag (our [MediaItem]) of a queue entry — what identifies it, by identity,

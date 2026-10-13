@@ -9,6 +9,7 @@ import 'app_colors.dart';
 import 'providers/equalizer_provider.dart';
 import 'providers/playback_settings_provider.dart';
 import 'providers/theme_provider.dart';
+import 'services/stream_cache.dart';
 import 'theme.dart';
 import 'tv/tv_detection.dart';
 
@@ -51,6 +52,7 @@ void main() {
     final playback = await loadPlaybackSettings();
     audioHandler.setReplayGain(playback.replayGain, playback.preampDb);
 
+    final streamCache = await loadStreamCache();
     final equalizer = await loadEqualizerState();
     final isTv = await detectAndroidTv();
 
@@ -58,6 +60,7 @@ void main() {
       ProviderScope(
         overrides: [
           audioHandlerProvider.overrideWithValue(audioHandler),
+          streamCacheProvider.overrideWithValue(streamCache),
           isTvProvider.overrideWithValue(isTv),
           themeModeProvider.overrideWith((ref) => ThemeModeNotifier(themeMode)),
           skinProvider.overrideWith((ref) => SkinNotifier(skin)),

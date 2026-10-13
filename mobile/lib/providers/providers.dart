@@ -6,6 +6,7 @@ import '../api/types.dart';
 import '../api/subsonic.dart';
 import '../services/auth_service.dart';
 import '../services/download_service.dart';
+import '../services/stream_cache.dart';
 import '../audio/audio_handler.dart';
 import '../audio/shuffle_order.dart';
 import '../connect/connect_models.dart' show CommandType;
@@ -15,6 +16,10 @@ import '../connect/remote_controller.dart';
 
 final authServiceProvider = Provider((_) => AuthService());
 final downloadServiceProvider = Provider((_) => DownloadService());
+
+/// The cache of streamed songs (see [StreamCache]); null where there is none
+/// (tests), set up in main().
+final streamCacheProvider = Provider<StreamCache?>((_) => null);
 
 // ── Audio handler (overridden in main with the initialized singleton) ─────────
 
@@ -143,6 +148,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   // next pass, it counts as another play.
   final DateTime Function() _now;
   final Random _random;
+  final StreamCache? _cache;
 
   /// Set by RiffPlayer Connect: while another device is playing, the transport actions below become
   /// remote commands instead of driving the local player.
@@ -180,8 +186,10 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     return result;
   }
 
-  PlayerNotifier(this._handler, {DateTime Function()? now, Random? random})
+  PlayerNotifier(this._handler,
+      {DateTime Function()? now, Random? random, StreamCache? cache})
       : _now = now ?? DateTime.now,
+        _cache = cache,
         _random = random ?? Random(),
         super(const PlayerState()) {
     _handler.positionStream.listen((pos) {
@@ -201,6 +209,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       if (_remoteMirror) return;
       state = state.copyWith(currentIndex: idx ?? -1);
       _queuedCount = 0;
+      _trimCache();
       _listenedSinceSubmitMs = 0;
       // Skipping (next/previous/tap-in-queue) changes the track without going
       // through playSong() — send its "now playing" scrobble here instead.
@@ -221,6 +230,19 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     });
   }
 
+  // Keeps the stream cache within its size limit as playback moves on, never
+  // deleting the song playing or the one after it.
+  void _trimCache() {
+    final cache = _cache;
+    if (cache == null || !cache.enabled) return;
+    final i = state.currentIndex;
+    final keep = <String>{
+      for (final n in [i, i + 1])
+        if (n >= 0 && n < state.queue.length) state.queue[n].id,
+    };
+    cache.trim(keep: keep).catchError((_) {}).ignore();
+  }
+
   Future<void> playSong(
     Song song,
     SubsonicClient client,
@@ -235,7 +257,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     var resolvedIndex = idx < 0 ? 0 : idx;
 
     var sources = await Future.wait(
-      songs.map((s) => buildAudioSource(s, client, downloads)),
+      songs.map((s) => buildAudioSource(s, client, downloads, cache: _cache)),
     );
 
     // With shuffle on, the queue itself is shuffled (the tapped song first) so
@@ -372,7 +394,8 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     DownloadService downloads,
   ) =>
       _serializeQueueOp(() async {
-        final source = await buildAudioSource(song, client, downloads);
+        final source =
+            await buildAudioSource(song, client, downloads, cache: _cache);
         if (state.currentIndex < 0 || state.queue.isEmpty) {
           await _addToQueueLocked(song, client, downloads);
           return;
@@ -386,7 +409,8 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     SubsonicClient client,
     DownloadService downloads,
   ) async {
-    final source = await buildAudioSource(song, client, downloads);
+    final source =
+        await buildAudioSource(song, client, downloads, cache: _cache);
     if (state.currentIndex < 0) {
       // Nothing playing — this starts it from scratch.
       await _handler.insertAt(0, source);
@@ -577,7 +601,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     if (songs.isEmpty) return;
     final i = index.clamp(0, songs.length - 1);
     final sources = await Future.wait(
-      songs.map((s) => buildAudioSource(s, client, downloads)),
+      songs.map((s) => buildAudioSource(s, client, downloads, cache: _cache)),
     );
     _remoteMirror = false;
     state = state.copyWith(
@@ -617,7 +641,8 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 }
 
 final playerProvider = StateNotifierProvider<PlayerNotifier, PlayerState>(
-  (ref) => PlayerNotifier(ref.read(audioHandlerProvider)),
+  (ref) => PlayerNotifier(ref.read(audioHandlerProvider),
+      cache: ref.read(streamCacheProvider)),
 );
 
 // ── Library data providers ─────────────────────────────────────────────────────

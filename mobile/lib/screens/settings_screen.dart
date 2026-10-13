@@ -17,6 +17,7 @@ import '../audio/equalizer_model.dart';
 import '../providers/equalizer_provider.dart';
 import '../providers/playback_settings_provider.dart';
 import '../providers/theme_provider.dart';
+import '../services/stream_cache.dart';
 
 const _transcodeFormats = [
   (null, 'Original format'),
@@ -98,6 +99,8 @@ class SettingsScreen extends ConsumerWidget {
             const _AppearanceSection(),
             const SizedBox(height: 24),
             const _PlaybackSection(),
+            const SizedBox(height: 24),
+            const _StreamCacheSection(),
             const SizedBox(height: 24),
             const LinkTvSection(),
             const SizedBox(height: 24),
@@ -473,6 +476,85 @@ class _AppearanceSection extends ConsumerWidget {
               style: TextStyle(color: AppColors.muted, fontSize: 12),
             ),
           ),
+      ],
+    );
+  }
+}
+
+/// Size of the cache of streamed songs, how much of it is used, and a button to
+/// empty it.
+class _StreamCacheSection extends ConsumerStatefulWidget {
+  const _StreamCacheSection();
+
+  @override
+  ConsumerState<_StreamCacheSection> createState() =>
+      _StreamCacheSectionState();
+}
+
+class _StreamCacheSectionState extends ConsumerState<_StreamCacheSection> {
+  Future<int>? _usage;
+
+  String _label(int mb) =>
+      mb == 0 ? 'Off' : (mb >= 1024 ? '${mb ~/ 1024} GB' : '$mb MB');
+
+  String _size(int bytes) => bytes >= 1024 * 1024 * 1024
+      ? '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB'
+      : '${(bytes / (1024 * 1024)).round()} MB';
+
+  @override
+  Widget build(BuildContext context) {
+    final cache = ref.watch(streamCacheProvider);
+    if (cache == null) return const SizedBox.shrink();
+    final currentMb = cache.maxBytes ~/ (1024 * 1024);
+    _usage ??= cache.usageBytes();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionLabel('Offline cache'),
+        const SizedBox(height: 8),
+        Text('Keep songs you play',
+            style: TextStyle(color: AppColors.text, fontSize: 14)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          children: [
+            for (final mb in streamCacheLimitsMb)
+              ChoiceChip(
+                label: Text(_label(mb)),
+                selected: currentMb == mb,
+                onSelected: (_) async {
+                  await setStreamCacheLimitMb(cache, mb);
+                  if (mounted) setState(() => _usage = cache.usageBytes());
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        FutureBuilder<int>(
+          future: _usage,
+          builder: (_, snap) => Row(
+            children: [
+              Expanded(
+                child: Text(
+                  currentMb == 0
+                      ? 'Songs you play are streamed and not kept. Downloads are separate and never removed.'
+                      : 'Using ${_size(snap.data ?? 0)} of ${_label(currentMb)}. '
+                          'The songs played longest ago are removed first; downloads are separate and never removed.',
+                  style: TextStyle(color: AppColors.muted, fontSize: 12),
+                ),
+              ),
+              if (currentMb > 0)
+                TextButton(
+                  onPressed: () async {
+                    await cache.clear();
+                    if (mounted) setState(() => _usage = cache.usageBytes());
+                  },
+                  child: const Text('Clear'),
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }

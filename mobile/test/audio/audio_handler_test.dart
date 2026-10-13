@@ -1,7 +1,11 @@
+// ignore_for_file: experimental_member_use
+import 'dart:io';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:riffplayer_mobile/api/subsonic.dart';
 import 'package:riffplayer_mobile/api/types.dart';
 import 'package:riffplayer_mobile/audio/audio_handler.dart';
+import 'package:riffplayer_mobile/services/stream_cache.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:mocktail/mocktail.dart';
@@ -163,6 +167,67 @@ void main() {
       await buildAudioSource(song, client, downloads);
 
       verifyNever(() => downloads.localCoverPath(any()));
+    });
+  });
+
+  group('buildAudioSource with the stream cache', () {
+    late MockDownloadService downloads;
+    late Directory dir;
+    late StreamCache cache;
+
+    setUp(() {
+      downloads = MockDownloadService();
+      when(() => downloads.localPath(any())).thenAnswer((_) async => null);
+      dir = Directory.systemTemp.createTempSync('handler_cache_test_');
+      cache = StreamCache(dir, maxBytes: 1024 * 1024);
+    });
+
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    test('streams and keeps a copy while it plays when the song is not cached',
+        () async {
+      final source =
+          await buildAudioSource(_song('t1'), client, downloads, cache: cache);
+
+      expect(source, isA<LockCachingAudioSource>());
+      final lock = source as LockCachingAudioSource;
+      expect(lock.uri.queryParameters['id'], 't1');
+      expect((await lock.cacheFile).path, cache.fileFor('t1', 'mp3').path);
+      expect(((lock.tag) as MediaItem).id, 't1');
+    });
+
+    test('plays the cached file when the song is already cached', () async {
+      cache.fileFor('t1', 'mp3')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([1, 2, 3]);
+
+      final source =
+          await buildAudioSource(_song('t1'), client, downloads, cache: cache);
+
+      final uri = (source.sequence.single as UriAudioSource).uri;
+      expect(uri, Uri.file(cache.fileFor('t1', 'mp3').path));
+    });
+
+    test('a download wins over the cache', () async {
+      when(() => downloads.localPath('t1'))
+          .thenAnswer((_) async => '/downloads/t1.mp3');
+      when(() => downloads.localCoverPath('t1')).thenAnswer((_) async => null);
+
+      final source =
+          await buildAudioSource(_song('t1'), client, downloads, cache: cache);
+
+      expect((source.sequence.single as UriAudioSource).uri,
+          Uri.file('/downloads/t1.mp3'));
+    });
+
+    test('with the cache off it streams as before', () async {
+      cache.maxBytes = 0;
+
+      final source =
+          await buildAudioSource(_song('t1'), client, downloads, cache: cache);
+
+      expect(source, isNot(isA<LockCachingAudioSource>()));
+      expect((source.sequence.single as UriAudioSource).uri.scheme, 'http');
     });
   });
 }
