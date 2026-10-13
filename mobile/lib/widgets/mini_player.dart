@@ -6,8 +6,8 @@ import '../api/types.dart';
 import '../providers/providers.dart';
 import '../connect/connect_provider.dart';
 import 'device_picker.dart';
-import 'cover_art.dart';
 import '../app_colors.dart';
+import 'song_cover.dart';
 
 // Swipe-left/right thresholds for skipping tracks — a swipe past either one
 // (distance OR flick velocity) fires; short/slow drags snap back to 0. Kept
@@ -237,13 +237,12 @@ class _MiniSongInfo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        CoverArt(
+        SongCover(
+          song: song,
           // 100, not 56 — matches the ~2.3x ratio used for every other 44px
           // thumbnail elsewhere (song_tile.dart, library_list_row.dart) for
           // consistency on high-DPI.
-          url: song.coverArt != null
-              ? client?.coverArtUrl(song.coverArt!, size: 100)
-              : null,
+          remoteSize: 100,
           size: 44,
           borderRadius: BorderRadius.circular(4),
         ),

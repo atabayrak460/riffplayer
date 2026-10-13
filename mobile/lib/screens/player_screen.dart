@@ -9,7 +9,6 @@ import '../providers/providers.dart';
 import '../providers/theme_provider.dart';
 import '../theme.dart';
 import '../utils/snackbar.dart';
-import '../widgets/cover_art.dart';
 import '../widgets/lyrics_view.dart';
 import '../widgets/quality_badge.dart';
 import '../widgets/song_actions.dart';
@@ -18,6 +17,7 @@ import '../widgets/nowplaying/artist_tracks_section.dart';
 import '../widgets/device_picker.dart';
 import '../widgets/nowplaying/up_next_section.dart';
 import '../app_colors.dart';
+import '../widgets/song_cover.dart';
 
 String _fmt(Duration d) {
   final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
@@ -573,13 +573,12 @@ class _PlayerCoverArt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CoverArt(
+    return SongCover(
+      song: song,
       // Full-screen hero image — the most prominent artwork in the app
       // deserves a size closer to what a high-DPI display actually needs,
       // not the ~44px-thumbnail-derived default.
-      url: song.coverArt != null
-          ? client?.coverArtUrl(song.coverArt!, size: 800)
-          : null,
+      remoteSize: 800,
       size: size,
       borderRadius: BorderRadius.circular(12),
     );

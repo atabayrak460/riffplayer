@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/providers.dart';
-import '../cover_art.dart';
 import '../../app_colors.dart';
+import '../song_cover.dart';
 
 /// Mirrors web's NowPlayingPanel UpNextSection — shows the very next queued
 /// track, tap to skip to it. Player screen equivalent of #68.
@@ -20,8 +20,6 @@ class UpNextSection extends ConsumerWidget {
         ? queue[currentIndex + 1]
         : null;
     if (upNext == null) return const SizedBox.shrink();
-
-    final client = ref.read(apiClientProvider);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
@@ -42,10 +40,9 @@ class UpNextSection extends ConsumerWidget {
           ),
           ListTile(
             onTap: () => ref.read(playerProvider.notifier).next(),
-            leading: CoverArt(
-              url: upNext.coverArt != null
-                  ? client?.coverArtUrl(upNext.coverArt!, size: 80)
-                  : null,
+            leading: SongCover(
+              song: upNext,
+              remoteSize: 80,
               size: 40,
               borderRadius: BorderRadius.circular(4),
             ),

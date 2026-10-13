@@ -4,7 +4,7 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:intl/intl.dart';
 import '../api/types.dart';
 import '../providers/providers.dart';
-import 'cover_art.dart';
+import 'song_cover.dart';
 import 'song_actions.dart';
 import '../app_colors.dart';
 
@@ -64,10 +64,7 @@ class SongTile extends ConsumerWidget {
     final tile = ListTile(
       onTap: onTap ?? () => _play(ref),
       leading: showAlbum
-          ? CoverArt(
-              url: _coverUrl(ref, song.coverArt),
-              size: 44,
-            )
+          ? SongCover(song: song, remoteSize: 100, size: 44)
           : showNumber
               ? SizedBox(
                   width: 32,
@@ -194,11 +191,6 @@ class SongTile extends ConsumerWidget {
             ),
       child: tile,
     );
-  }
-
-  String? _coverUrl(WidgetRef ref, String? coverArt) {
-    final client = ref.read(apiClientProvider);
-    return coverArt != null ? client?.coverArtUrl(coverArt, size: 100) : null;
   }
 
   void _play(WidgetRef ref) {
