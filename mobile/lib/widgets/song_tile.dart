@@ -50,6 +50,13 @@ class SongTile extends ConsumerWidget {
     this.onRemove,
   });
 
+  Widget _subtitleLine() => Text(
+        showAlbum ? '${song.artist} · ${song.album}' : song.artist,
+        style: TextStyle(color: AppColors.muted, fontSize: 12),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Scoped to just the current song's id (via .select()) rather than
@@ -92,22 +99,25 @@ class SongTile extends ConsumerWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      subtitle: Text(
-        showAlbum ? '${song.artist} · ${song.album}' : song.artist,
-        style: TextStyle(color: AppColors.muted, fontSize: 12),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+      // The date added goes under the artist line rather than into the
+      // trailing column: next to the duration and the menu it left the title
+      // only ~90px on a phone-width screen.
+      subtitle: addedAt == null
+          ? _subtitleLine()
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _subtitleLine(),
+                Text(
+                  _addedAtFormat.format(addedAt!),
+                  style: TextStyle(color: AppColors.muted, fontSize: 11),
+                  maxLines: 1,
+                ),
+              ],
+            ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (addedAt != null) ...[
-            Text(
-              _addedAtFormat.format(addedAt!),
-              style: TextStyle(color: AppColors.muted, fontSize: 12),
-            ),
-            const SizedBox(width: 12),
-          ],
           // Currently-playing rows can't be swiped to queue (see startActionPane
           // below) — this icon is the only surviving indicator of that once the
           // row layout is otherwise identical to any other row.
@@ -122,7 +132,15 @@ class SongTile extends ConsumerWidget {
           ),
           const SizedBox(width: 4),
           PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert, color: AppColors.muted, size: 18),
+            tooltip: 'More options',
+            // A snug 32px target instead of the default 48px square: the title
+            // needs the room more.
+            padding: EdgeInsets.zero,
+            child: SizedBox(
+              width: 32,
+              height: 40,
+              child: Icon(Icons.more_vert, color: AppColors.muted, size: 18),
+            ),
             itemBuilder: (_) => songMenuEntries(song,
                 isAdmin: isAdmin, canRemove: onRemove != null),
             onSelected: (v) =>

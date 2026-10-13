@@ -54,6 +54,8 @@ void main() {
     List<Song>? queue,
     VoidCallback? onRemove,
     Song? nowPlaying,
+    bool showAlbum = false,
+    DateTime? addedAt,
   }) async {
     final notifier = PlayerNotifier(handler);
     if (nowPlaying != null) {
@@ -69,7 +71,13 @@ void main() {
         ],
         child: MaterialApp(
           home: Scaffold(
-            body: SongTile(song: song, queue: queue, onRemove: onRemove),
+            body: SongTile(
+              song: song,
+              queue: queue,
+              onRemove: onRemove,
+              showAlbum: showAlbum,
+              addedAt: addedAt,
+            ),
           ),
         ),
       ),
@@ -79,6 +87,30 @@ void main() {
   }
 
   group('rendering', () {
+    testWidgets(
+        'the date added sits under the artist, leaving the title its room '
+        '(All Songs on a phone-width screen)', (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await pumpTile(tester,
+          song: _song('a'), showAlbum: true, addedAt: DateTime(2026, 10, 3));
+
+      final title = tester.getRect(find.text('Title a'));
+      final artist = tester.getRect(find.textContaining('Artist a'));
+      final date = tester.getRect(find.text('Oct 3, 2026'));
+      // Before: the date sat in the trailing column and the title got no room.
+      expect(title.width, greaterThan(90));
+      expect(date.top, greaterThanOrEqualTo(artist.bottom));
+      expect(date.left, artist.left);
+    });
+
+    testWidgets('without a date there is no extra line', (tester) async {
+      await pumpTile(tester, song: _song('a'), showAlbum: true);
+      expect(find.text('Oct 3, 2026'), findsNothing);
+    });
+
     testWidgets('shows the title, artist and duration', (tester) async {
       await pumpTile(tester, song: _song('a'));
 
