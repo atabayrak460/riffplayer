@@ -44,11 +44,16 @@ void main() {
             sort: any(named: 'sort'),
             quality: any(named: 'quality')))
         .thenAnswer((_) async => _songs(0, 200));
-    when(() => client.getAllSongs(200, 200,
+    when(() => client.getAllSongs(200, 1000,
             genre: any(named: 'genre'),
             sort: any(named: 'sort'),
             quality: any(named: 'quality')))
-        .thenAnswer((_) async => _songs(200, 50));
+        .thenAnswer((_) async => _songs(200, 1000));
+    when(() => client.getAllSongs(1200, 1000,
+            genre: any(named: 'genre'),
+            sort: any(named: 'sort'),
+            quality: any(named: 'quality')))
+        .thenAnswer((_) async => _songs(1200, 50));
   });
 
   Future<void> pumpScreen(WidgetTester tester) async {
@@ -65,44 +70,50 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('loads the next page by itself when scrolled near the end',
+  testWidgets(
+      'loads the whole library by itself, without scrolling or a button',
       (tester) async {
     await pumpScreen(tester);
 
     expect(find.text('Load more'), findsNothing);
-    verifyNever(() => client.getAllSongs(200, 200,
+    // Both further pages were requested with no user action at all.
+    verify(() => client.getAllSongs(200, 1000,
         genre: any(named: 'genre'),
         sort: any(named: 'sort'),
-        quality: any(named: 'quality')));
-
-    await tester.drag(find.byType(ListView), const Offset(0, -100000));
-    await tester.pumpAndSettle();
-
-    verify(() => client.getAllSongs(200, 200,
+        quality: any(named: 'quality'))).called(1);
+    verify(() => client.getAllSongs(1200, 1000,
         genre: any(named: 'genre'),
         sort: any(named: 'sort'),
         quality: any(named: 'quality'))).called(1);
 
-    await tester.drag(find.byType(ListView), const Offset(0, -100000));
+    // So the end of the list is one jump away.
+    await tester.drag(find.byType(ListView), const Offset(0, -10000000));
     await tester.pumpAndSettle();
-    expect(find.text('Title 249'), findsOneWidget);
+    expect(find.text('Title 1249'), findsOneWidget);
   });
 
   testWidgets('stops requesting pages once a short page comes back',
       (tester) async {
     await pumpScreen(tester);
-    for (var i = 0; i < 3; i++) {
-      await tester.drag(find.byType(ListView), const Offset(0, -100000));
-      await tester.pumpAndSettle();
-    }
+    await tester.drag(find.byType(ListView), const Offset(0, -10000000));
+    await tester.pumpAndSettle();
 
-    verify(() => client.getAllSongs(200, 200,
-        genre: any(named: 'genre'),
-        sort: any(named: 'sort'),
-        quality: any(named: 'quality'))).called(1);
-    verifyNever(() => client.getAllSongs(250, 200,
+    verifyNever(() => client.getAllSongs(1250, 1000,
         genre: any(named: 'genre'),
         sort: any(named: 'sort'),
         quality: any(named: 'quality')));
+  });
+
+  testWidgets('keeps what loaded when a later page fails', (tester) async {
+    when(() => client.getAllSongs(200, 1000,
+            genre: any(named: 'genre'),
+            sort: any(named: 'sort'),
+            quality: any(named: 'quality')))
+        .thenAnswer((_) async => throw Exception('network'));
+
+    await pumpScreen(tester);
+
+    expect(find.text('Title 0'), findsOneWidget);
+    expect(find.textContaining('Error'), findsNothing);
   });
 }

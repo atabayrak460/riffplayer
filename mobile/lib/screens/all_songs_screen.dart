@@ -6,7 +6,10 @@ import '../widgets/quality_filter_menu.dart';
 import '../widgets/song_tile.dart';
 import '../app_colors.dart';
 
-const _pageSize = 200;
+// The first page is small so the list shows at once; the rest follows in the
+// background in bigger pages until the whole library is loaded.
+const _firstPageSize = 200;
+const _pageSize = 1000;
 
 class AllSongsScreen extends ConsumerStatefulWidget {
   const AllSongsScreen({super.key});
@@ -28,27 +31,10 @@ class _AllSongsScreenState extends ConsumerState<AllSongsScreen> {
   // choice can't overwrite the list for the current one.
   int _generation = 0;
 
-  // Next page is requested this far (px) before the end of the list, so it is
-  // usually there before the user gets to the bottom.
-  static const _loadMoreThreshold = 800.0;
-  final _scrollController = ScrollController();
-
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
     _load();
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    final pos = _scrollController.position;
-    if (pos.extentAfter < _loadMoreThreshold) _loadMore();
   }
 
   Future<void> _load() async {
@@ -60,16 +46,17 @@ class _AllSongsScreenState extends ConsumerState<AllSongsScreen> {
       _error = null;
     });
     try {
-      final page = await client.getAllSongs(0, _pageSize,
+      final page = await client.getAllSongs(0, _firstPageSize,
           genre: _genre, sort: _sort, quality: _quality);
       if (gen != _generation) return;
       setState(() {
         _songs
           ..clear()
           ..addAll(page);
-        _hasMore = page.length == _pageSize;
+        _hasMore = page.length == _firstPageSize;
         _loading = false;
       });
+      _loadRest(gen);
     } catch (e) {
       if (gen != _generation) return;
       setState(() {
@@ -79,23 +66,28 @@ class _AllSongsScreenState extends ConsumerState<AllSongsScreen> {
     }
   }
 
-  Future<void> _loadMore() async {
+  // Fetches the remaining pages one after another, so the scrollbar spans the
+  // whole library and can be dragged straight to the end. Stops when a filter
+  // or sort change starts a newer load ([gen] no longer current).
+  Future<void> _loadRest(int gen) async {
     final client = ref.read(apiClientProvider);
-    if (client == null || _loadingMore || !_hasMore) return;
-    final gen = _generation;
-    setState(() => _loadingMore = true);
-    try {
-      final page = await client.getAllSongs(_songs.length, _pageSize,
-          genre: _genre, sort: _sort, quality: _quality);
-      if (gen != _generation) return;
-      setState(() {
-        _songs.addAll(page);
-        _hasMore = page.length == _pageSize;
-        _loadingMore = false;
-      });
-    } catch (_) {
-      if (gen == _generation) setState(() => _loadingMore = false);
+    if (client == null) return;
+    while (mounted && gen == _generation && _hasMore) {
+      setState(() => _loadingMore = true);
+      try {
+        final page = await client.getAllSongs(_songs.length, _pageSize,
+            genre: _genre, sort: _sort, quality: _quality);
+        if (!mounted || gen != _generation) return;
+        setState(() {
+          _songs.addAll(page);
+          _hasMore = page.length == _pageSize;
+        });
+      } catch (_) {
+        // Keep what is loaded; a filter change or reopening retries.
+        _hasMore = false;
+      }
     }
+    if (mounted && gen == _generation) setState(() => _loadingMore = false);
   }
 
   void _setSort(String sort) {
@@ -192,12 +184,10 @@ class _AllSongsScreenState extends ConsumerState<AllSongsScreen> {
                           style: TextStyle(color: AppColors.muted)),
                     )
                   : ListView.builder(
-                      controller: _scrollController,
                       itemCount: _songs.length + 1,
                       itemBuilder: (_, i) {
                         if (i == _songs.length) {
-                          // Scrolling loads the next page (see _onScroll); this
-                          // only shows that one is on its way.
+                          // Only shows that the rest is still arriving.
                           return SizedBox(
                             height: 64,
                             child: Center(
