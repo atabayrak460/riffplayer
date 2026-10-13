@@ -28,10 +28,27 @@ class _AllSongsScreenState extends ConsumerState<AllSongsScreen> {
   // choice can't overwrite the list for the current one.
   int _generation = 0;
 
+  // Next page is requested this far (px) before the end of the list, so it is
+  // usually there before the user gets to the bottom.
+  static const _loadMoreThreshold = 800.0;
+  final _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    final pos = _scrollController.position;
+    if (pos.extentAfter < _loadMoreThreshold) _loadMore();
   }
 
   Future<void> _load() async {
@@ -175,19 +192,18 @@ class _AllSongsScreenState extends ConsumerState<AllSongsScreen> {
                           style: TextStyle(color: AppColors.muted)),
                     )
                   : ListView.builder(
+                      controller: _scrollController,
                       itemCount: _songs.length + 1,
                       itemBuilder: (_, i) {
                         if (i == _songs.length) {
-                          if (!_hasMore) return const SizedBox(height: 24);
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
+                          // Scrolling loads the next page (see _onScroll); this
+                          // only shows that one is on its way.
+                          return SizedBox(
+                            height: 64,
                             child: Center(
                               child: _loadingMore
                                   ? const CircularProgressIndicator()
-                                  : TextButton(
-                                      onPressed: _loadMore,
-                                      child: const Text('Load more'),
-                                    ),
+                                  : null,
                             ),
                           );
                         }
