@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getDb } from '../../../db/database.js';
 import { escapeLike } from '../../../db/likeEscape.js';
 import { toFts5Phrase } from '../../../db/fts5Escape.js';
+import { MIN_FUZZY_QUERY_LENGTH, fuzzyRank, normalizeForFuzzy, trigramOrQuery } from '../../../db/fuzzy.js';
 import { sendOk } from '../response.js';
 import { xmlTag, artistAttrs, albumAttrs, songAttrs, toJson, type ArtistRow, type AlbumRow, type SongRow } from '../serialize.js';
 import { SONG_SELECT_LIST, SONG_FROM } from './browse.js';
@@ -15,6 +16,9 @@ const p = (req: FastifyRequest) => ({ ...(req.query as Q), ...((req.body as Q) ?
 // returns zero rows — fall back to the original LIKE '%...%' scan for
 // those (rare, and a short query already matches a lot / scans fast).
 const MIN_FTS_QUERY_LENGTH = 3;
+
+// How many trigram-sharing rows a fuzzy search looks at before judging them.
+const FUZZY_CANDIDATES = 300;
 
 const ARTIST_TAIL = `
   a.id, a.name, a.image_path,
@@ -48,6 +52,22 @@ GROUP BY a.id
 ORDER BY a.name
 LIMIT ? OFFSET ?`;
 
+// Fuzzy-search candidates: same FTS join, but best FTS match first (not by
+// name) so the cut-off below keeps the most promising rows.
+const ARTIST_COLS_CANDIDATES = `${ARTIST_TAIL}
+JOIN artists_fts ON artists_fts.rowid = a.id
+WHERE artists_fts MATCH ?
+GROUP BY a.id
+ORDER BY artists_fts.rank
+LIMIT ? OFFSET ?`;
+
+const ALBUM_COLS_CANDIDATES = `${ALBUM_TAIL}
+JOIN albums_fts ON albums_fts.rowid = al.id
+WHERE albums_fts MATCH ?
+GROUP BY al.id
+ORDER BY albums_fts.rank
+LIMIT ? OFFSET ?`;
+
 const ALBUM_COLS_LIKE = `${ALBUM_TAIL}
 WHERE al.name LIKE ? ESCAPE '\\'
 GROUP BY al.id
@@ -67,6 +87,7 @@ LIMIT ? OFFSET ?`;
 // — never interpolated from user input directly.
 const SONG_SORTS: Record<string, string> = {
   title: 't.title COLLATE NOCASE',
+  relevance: 'tracks_fts.rank', // internal: fuzzy-search candidates (needs the FTS join)
   added_desc: 't.added_at DESC, t.id DESC',
   added_asc: 't.added_at ASC, t.id ASC',
 };
@@ -98,18 +119,46 @@ function search3(req: FastifyRequest, reply: FastifyReply): void {
   const useFts = query.length >= MIN_FTS_QUERY_LENGTH;
   const matchArg = useFts ? toFts5Phrase(query) : `%${escapeLike(query)}%`;
 
-  const artists = db
+  let artists = db
     .prepare(`SELECT ${useFts ? ARTIST_COLS_FTS : ARTIST_COLS_LIKE}`)
     .all(userId, matchArg, Number(artistCount), Number(artistOffset)) as ArtistRow[];
-  const albums = db
+  let albums = db
     .prepare(`SELECT ${useFts ? ALBUM_COLS_FTS : ALBUM_COLS_LIKE}`)
     .all(userId, matchArg, Number(albumCount), Number(albumOffset)) as AlbumRow[];
   const songParams: (string | number)[] = [userId, matchArg];
   if (genre) songParams.push(genre);
   songParams.push(Number(songCount), Number(songOffset));
-  const songs = db
-    .prepare(`SELECT ${songQuery(useFts, !!genre, sort, qualityCondition(quality))}`)
+  let songs = db
+    .prepare(`SELECT ${songQuery(useFts, !!genre, sort === 'relevance' ? 'title' : sort, qualityCondition(quality))}`)
     .all(...songParams) as SongRow[];
+
+  // An exact search that finds nothing is retried allowing a typo or two. Only
+  // for the first page of a kind that had no exact hit, so a result list never
+  // mixes exact and fuzzy matches or changes between pages.
+  if (normalizeForFuzzy(query).length >= MIN_FUZZY_QUERY_LENGTH) {
+    const grams = trigramOrQuery(query);
+    if (grams) {
+      if (artists.length === 0 && Number(artistOffset) === 0 && Number(artistCount) > 0) {
+        const candidates = db.prepare(`SELECT ${ARTIST_COLS_CANDIDATES}`)
+          .all(userId, grams, FUZZY_CANDIDATES, 0) as ArtistRow[];
+        artists = fuzzyRank(query, candidates, (a) => a.name).slice(0, Number(artistCount));
+      }
+      if (albums.length === 0 && Number(albumOffset) === 0 && Number(albumCount) > 0) {
+        const candidates = db.prepare(`SELECT ${ALBUM_COLS_CANDIDATES}`)
+          .all(userId, grams, FUZZY_CANDIDATES, 0) as AlbumRow[];
+        albums = fuzzyRank(query, candidates, (a) => a.name).slice(0, Number(albumCount));
+      }
+      if (songs.length === 0 && Number(songOffset) === 0 && Number(songCount) > 0) {
+        const params: (string | number)[] = [userId, grams];
+        if (genre) params.push(genre);
+        params.push(FUZZY_CANDIDATES, 0);
+        const candidates = db
+          .prepare(`SELECT ${songQuery(true, !!genre, 'relevance', qualityCondition(quality))}`)
+          .all(...params) as SongRow[];
+        songs = fuzzyRank(query, candidates, (s) => s.title).slice(0, Number(songCount));
+      }
+    }
+  }
 
   sendOk(reply, f, {
     xml: xmlTag('searchResult3', {},

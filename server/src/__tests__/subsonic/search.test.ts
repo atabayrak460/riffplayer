@@ -69,11 +69,13 @@ describe('search3', () => {
   });
 
   it('treats a literal underscore in the query as a literal character, not a wildcard', async () => {
-    // "Test_Artist" would spuriously match "Test Artist" if `_` were left as
-    // an unescaped LIKE wildcard (it matches any single character, including
-    // the space) — it must not match once `_` is escaped.
+    // "T_" would spuriously match "Test Artist" if `_` were left as an
+    // unescaped LIKE wildcard (it matches any single character) — it must not
+    // match once `_` is escaped. (A 2-character query takes the LIKE path;
+    // longer ones go through FTS and, failing that, the typo-tolerant search,
+    // which deliberately looks past punctuation.)
     const res = await app.inject({
-      url: `/rest/search3.view?${auth}&query=${encodeURIComponent('Test_Artist')}&albumCount=0&songCount=0`,
+      url: `/rest/search3.view?${auth}&query=${encodeURIComponent('T_')}&albumCount=0&songCount=0`,
     });
     const result = (sr(res.body).searchResult3) as Record<string, unknown[]>;
     expect(result.artist.length).toBe(0);
@@ -81,7 +83,7 @@ describe('search3', () => {
 
   it('treats a literal percent sign in the query as a literal character, not a wildcard', async () => {
     const res = await app.inject({
-      url: `/rest/search3.view?${auth}&query=${encodeURIComponent('Test%Artist')}&albumCount=0&songCount=0`,
+      url: `/rest/search3.view?${auth}&query=${encodeURIComponent('T%')}&albumCount=0&songCount=0`,
     });
     const result = (sr(res.body).searchResult3) as Record<string, unknown[]>;
     expect(result.artist.length).toBe(0);
@@ -137,5 +139,87 @@ describe('search3', () => {
       const result = (sr(res.body).searchResult3) as Record<string, unknown[]>;
       expect(result.song.length).toBe(1);
     });
+  });
+});
+
+// Typo tolerance: an exact search that finds nothing is retried allowing a typo.
+describe('search3 typo tolerance', () => {
+  const search = async (query: string, extra = '') => {
+    const res = await app.inject({
+      url: `/rest/search3.view?${auth}&query=${encodeURIComponent(query)}${extra}`,
+    });
+    return sr(res.body).searchResult3 as Record<string, Array<Record<string, unknown>>>;
+  };
+
+  it('finds an artist despite a wrong letter', async () => {
+    const result = await search('Test Artest');
+    expect(result.artist.map((a) => a.name)).toEqual(['Test Artist']);
+  });
+
+  it('finds an album and a song despite swapped letters', async () => {
+    const result = await search('Tset Album');
+    expect(result.album.map((a) => a.name)).toEqual(['Test Album']);
+    const songs = await search('Test Tarck');
+    expect(songs.song.map((s) => s.title)).toEqual(['Test Track']);
+  });
+
+  it('finds a name with a missing letter', async () => {
+    const result = await search('Tst Artist');
+    expect(result.artist).toHaveLength(1);
+  });
+
+  it('ignores accents and case', async () => {
+    const db = getDb();
+    db.prepare('INSERT INTO artists (id, name) VALUES (9001, ?)').run('Beyoncé');
+    const result = await search('BEYONSE', '&albumCount=0&songCount=0');
+    expect(result.artist.map((a) => a.name)).toEqual(['Beyoncé']);
+  });
+
+  it('does not use it when the exact search already found something', async () => {
+    const db = getDb();
+    db.prepare('INSERT INTO artists (id, name) VALUES (9002, ?)').run('Test Artisan');
+    // "Test Artis" matches exactly; "Test Artisan" is not returned as a fuzzy extra of anything.
+    const result = await search('Test Artist', '&albumCount=0&songCount=0');
+    expect(result.artist.map((a) => a.name)).toEqual(['Test Artist']);
+  });
+
+  it('does not match unrelated names', async () => {
+    const result = await search('Completely Different');
+    expect(result.artist).toHaveLength(0);
+    expect(result.album).toHaveLength(0);
+    expect(result.song).toHaveLength(0);
+  });
+
+  it('tolerates only one slip in a short query', async () => {
+    const result = await search('Txsx', '&albumCount=0&songCount=0'); // two wrong letters
+    expect(result.artist).toHaveLength(0);
+  });
+
+  it('allows a second slip in a long query', async () => {
+    const result = await search('Tezt Artizt', '&albumCount=0&songCount=0');
+    expect(result.artist.map((a) => a.name)).toEqual(['Test Artist']);
+  });
+
+  it('does not start for a query too short to carry a typo', async () => {
+    const result = await search('Tas', '&albumCount=0&songCount=0');
+    expect(result.artist).toHaveLength(0);
+  });
+
+  it('respects the count of each kind', async () => {
+    const result = await search('Test Artest', '&artistCount=0');
+    expect(result.artist).toHaveLength(0);
+  });
+
+  it('keeps the genre filter on songs', async () => {
+    const result = await search('Test Tarck', '&genre=Nope&artistCount=0&albumCount=0');
+    expect(result.song).toHaveLength(0);
+  });
+
+  it('a user-supplied sort=relevance does not break an ordinary search', async () => {
+    const res = await app.inject({
+      url: `/rest/search3.view?${auth}&query=Test&sort=relevance`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(sr(res.body).status).toBe('ok');
   });
 });
