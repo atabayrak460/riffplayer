@@ -1185,4 +1185,57 @@ void main() {
       expect(dir.listSync(), hasLength(4));
     });
   });
+
+  group('playing from a very long list', () {
+    List<Song> library(int n) => [for (var i = 0; i < n; i++) _song('s$i')];
+
+    test('queues a window around the tapped song, not the whole list',
+        () async {
+      final songs = library(2000);
+
+      await notifier.playSong(songs[1500], client, downloads,
+          queue: songs, queueIndex: 1500);
+
+      expect(notifier.state.queue, hasLength(maxPlayQueue));
+      expect(notifier.state.currentSong!.id, 's1500');
+      expect(notifier.state.queue.first.id, 's${1500 - queueSongsBefore}');
+      expect(notifier.state.currentIndex, queueSongsBefore);
+      final sources = verify(() => handler.playQueue(captureAny(), 50))
+          .captured
+          .single as List;
+      expect(sources, hasLength(maxPlayQueue));
+    });
+
+    test('near the start the window starts at the first song', () async {
+      final songs = library(2000);
+
+      await notifier.playSong(songs[10], client, downloads,
+          queue: songs, queueIndex: 10);
+
+      expect(notifier.state.queue.first.id, 's0');
+      expect(notifier.state.currentIndex, 10);
+      expect(notifier.state.queue, hasLength(maxPlayQueue));
+    });
+
+    test('near the end the window still holds a full queue', () async {
+      final songs = library(2000);
+
+      await notifier.playSong(songs[1995], client, downloads,
+          queue: songs, queueIndex: 1995);
+
+      expect(notifier.state.queue, hasLength(maxPlayQueue));
+      expect(notifier.state.queue.last.id, 's1999');
+      expect(notifier.state.currentSong!.id, 's1995');
+    });
+
+    test('a list that fits is queued whole', () async {
+      final songs = library(maxPlayQueue);
+
+      await notifier.playSong(songs[100], client, downloads,
+          queue: songs, queueIndex: 100);
+
+      expect(notifier.state.queue, hasLength(maxPlayQueue));
+      expect(notifier.state.currentIndex, 100);
+    });
+  });
 }

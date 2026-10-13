@@ -128,6 +128,11 @@ class PlayerState {
       );
 }
 
+/// The most songs queued when playing from a long list, and how many of them
+/// sit before the tapped one (so Previous still has somewhere to go).
+const maxPlayQueue = 500;
+const queueSongsBefore = 50;
+
 class PlayerNotifier extends StateNotifier<PlayerState> {
   final RiffPlayerAudioHandler _handler;
 
@@ -255,6 +260,16 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     var songs = queue ?? [song];
     final idx = queueIndex ?? songs.indexWhere((s) => s.id == song.id);
     var resolvedIndex = idx < 0 ? 0 : idx;
+
+    // Playing from a very long list (All Songs) queues a window around the
+    // tapped song, not the whole library: every queued song costs a database
+    // lookup and an audio source, which froze weaker phones for seconds.
+    if (songs.length > maxPlayQueue) {
+      final start = (resolvedIndex - queueSongsBefore)
+          .clamp(0, songs.length - maxPlayQueue);
+      songs = songs.sublist(start, start + maxPlayQueue);
+      resolvedIndex -= start;
+    }
 
     var sources = await Future.wait(
       songs.map((s) => buildAudioSource(s, client, downloads, cache: _cache)),
