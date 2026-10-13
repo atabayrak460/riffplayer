@@ -1,18 +1,11 @@
-import '../providers/radio_provider.dart';
-import '../utils/radio_actions.dart';
-import '../utils/share_actions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import '../api/subsonic.dart';
 import '../api/types.dart';
 import '../providers/providers.dart';
-import '../utils/snackbar.dart';
-import 'add_to_playlist_dialog.dart';
 import 'cover_art.dart';
-import 'song_info_dialog.dart';
+import 'song_actions.dart';
 import '../app_colors.dart';
 
 String _fmtDuration(int? seconds) {
@@ -133,32 +126,10 @@ class SongTile extends ConsumerWidget {
           const SizedBox(width: 4),
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert, color: AppColors.muted, size: 18),
-            itemBuilder: (_) => [
-              const PopupMenuItem(value: 'queue', child: Text('Add to queue')),
-              const PopupMenuItem(
-                  value: 'playlist', child: Text('Add to playlist')),
-              const PopupMenuItem(value: 'download', child: Text('Download')),
-              PopupMenuItem(
-                value: 'star',
-                child: Text(song.isStarred ? 'Unstar' : 'Star'),
-              ),
-              const PopupMenuItem(value: 'album', child: Text('Go to album')),
-              const PopupMenuItem(value: 'artist', child: Text('Go to artist')),
-              const PopupMenuItem(value: 'radio', child: Text('Start radio')),
-              const PopupMenuItem(
-                  value: 'share', child: Text('Share as picture')),
-              const PopupMenuItem(value: 'info', child: Text('Song info')),
-              if (onRemove != null)
-                const PopupMenuItem(
-                    value: 'remove', child: Text('Remove from queue')),
-              if (isAdmin)
-                PopupMenuItem(
-                  value: 'delete',
-                  child: Text('Delete song',
-                      style: TextStyle(color: AppColors.danger)),
-                ),
-            ],
-            onSelected: (v) => _onMenu(v, context, ref),
+            itemBuilder: (_) => songMenuEntries(song,
+                isAdmin: isAdmin, canRemove: onRemove != null),
+            onSelected: (v) =>
+                handleSongAction(v, context, ref, song, onRemove: onRemove),
           ),
         ],
       ),
@@ -185,14 +156,14 @@ class SongTile extends ConsumerWidget {
                 dismissThreshold: 0.3,
                 closeOnCancel: true,
                 confirmDismiss: () async {
-                  _addToQueue(context, ref);
+                  addSongToQueue(context, ref, song);
                   return false;
                 },
                 onDismissed: () {},
               ),
               children: [
                 SlidableAction(
-                  onPressed: (_) => _addToQueue(context, ref),
+                  onPressed: (_) => addSongToQueue(context, ref, song),
                   backgroundColor: Theme.of(context).colorScheme.primary,
                   foregroundColor: AppColors.onBrand,
                   icon: Icons.queue_music,
@@ -225,22 +196,6 @@ class SongTile extends ConsumerWidget {
     );
   }
 
-  void _addToQueue(BuildContext context, WidgetRef ref) {
-    final client = ref.read(apiClientProvider);
-    if (client == null) return;
-    final downloads = ref.read(downloadServiceProvider);
-    ref
-        .read(playerProvider.notifier)
-        .addToQueue(song, client, downloads)
-        .then((_) {
-      // ignore: use_build_context_synchronously
-      showSnackBar(context, 'Added to queue');
-    }).catchError((_) {
-      // ignore: use_build_context_synchronously
-      showFailureSnackBar(context, 'Failed to add to queue');
-    }).ignore();
-  }
-
   String? _coverUrl(WidgetRef ref, String? coverArt) {
     final client = ref.read(apiClientProvider);
     return coverArt != null ? client?.coverArtUrl(coverArt, size: 100) : null;
@@ -257,94 +212,5 @@ class SongTile extends ConsumerWidget {
           queue: queue,
           queueIndex: queue?.indexOf(song),
         );
-  }
-
-  void _onMenu(String action, BuildContext context, WidgetRef ref) {
-    final client = ref.read(apiClientProvider);
-    if (client == null) return;
-    switch (action) {
-      case 'radio':
-        startRadio(context, ref, RadioSeed('song', song.id, song.title),
-            firstSong: song);
-      case 'share':
-        shareSongAsPicture(context, ref, song);
-      case 'queue':
-        _addToQueue(context, ref);
-      case 'playlist':
-        showDialog(
-            context: context,
-            builder: (_) => AddToPlaylistDialog(songId: song.id));
-      case 'download':
-        final downloads = ref.read(downloadServiceProvider);
-        downloads.download(song, client).catchError((_) {
-          // showFailureSnackBar itself guards on context.mounted — the
-          // analyzer just can't see that check through the callee.
-          // ignore: use_build_context_synchronously
-          showFailureSnackBar(context, 'Download failed');
-        }).ignore();
-      case 'star':
-        final newStarred = song.isStarred ? null : 'true';
-        final future = song.isStarred
-            ? client.unstar(id: song.id)
-            : client.star(id: song.id);
-        future.then((_) {
-          ref
-              .read(playerProvider.notifier)
-              .setStarredInQueue(song.id, newStarred);
-          ref.invalidate(starredProvider);
-        }).catchError((_) {
-          showFailureSnackBar(
-              // ignore: use_build_context_synchronously
-              context,
-              song.isStarred ? 'Failed to unstar' : 'Failed to star');
-        }).ignore();
-      case 'album':
-        // `.go()`, not `.push()`: this menu is reachable from a track's own
-        // album/artist page (e.g. an album's own track list), where pushing
-        // a duplicate of the page already underneath crashes with a
-        // duplicate-GlobalKey assertion.
-        context.go('/albums/${song.albumId}');
-      case 'artist':
-        context.go('/artists/${song.artistId}');
-      case 'info':
-        showDialog(
-            context: context, builder: (_) => SongInfoDialog(song: song));
-      case 'remove':
-        onRemove?.call();
-      case 'delete':
-        _confirmDelete(context, client);
-    }
-  }
-
-  Future<void> _confirmDelete(
-      BuildContext context, SubsonicClient client) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete song?'),
-        content: Text(
-            'Permanently delete "${song.title}"? This deletes the file and cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text('Delete', style: TextStyle(color: AppColors.danger)),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    try {
-      await client.deleteTrack(song.id);
-      // ignore: use_build_context_synchronously
-      showSnackBar(context, 'Deleted "${song.title}"');
-    } catch (_) {
-      // ignore: use_build_context_synchronously
-      showFailureSnackBar(context, 'Failed to delete song');
-    }
   }
 }

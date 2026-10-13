@@ -1,4 +1,3 @@
-import '../utils/share_actions.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +12,7 @@ import '../utils/snackbar.dart';
 import '../widgets/cover_art.dart';
 import '../widgets/lyrics_view.dart';
 import '../widgets/quality_badge.dart';
+import '../widgets/song_actions.dart';
 import '../widgets/nowplaying/album_tracks_section.dart';
 import '../widgets/nowplaying/artist_tracks_section.dart';
 import '../widgets/device_picker.dart';
@@ -225,10 +225,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         actions: [
           const DevicePickerButton(),
           if (song != null)
-            IconButton(
-              icon: const Icon(Icons.ios_share),
-              tooltip: 'Share as picture',
-              onPressed: () => shareSongAsPicture(context, ref, song),
+            // Same actions as a song row's menu (add to playlist, download,
+            // go to album/artist, radio, share, info, ...) for the song playing.
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              tooltip: 'More options',
+              itemBuilder: (_) => songMenuEntries(song,
+                  isAdmin: ref.read(meProvider).valueOrNull?.isAdmin ?? false),
+              onSelected: (v) => handleSongAction(v, context, ref, song),
             ),
           IconButton(
             icon: const Icon(Icons.queue_music),

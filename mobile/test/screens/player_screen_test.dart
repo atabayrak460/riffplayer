@@ -4,6 +4,7 @@ import 'package:riffplayer_mobile/providers/theme_provider.dart';
 import 'package:riffplayer_mobile/theme.dart';
 import 'package:riffplayer_mobile/providers/providers.dart';
 import 'package:riffplayer_mobile/screens/player_screen.dart';
+import 'package:riffplayer_mobile/widgets/add_to_playlist_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,7 +25,10 @@ Song _song(String id) => Song(
     );
 
 void main() {
-  setUpAll(registerMockFallbackValues);
+  setUpAll(() {
+    registerMockFallbackValues();
+    registerFallbackValue(_song('fallback'));
+  });
 
   late MockAudioHandler handler;
   late MockSubsonicClient client;
@@ -159,5 +163,62 @@ void main() {
         find.descendant(
             of: find.byType(PlayerScreen), matching: find.byType(SkinBackdrop)),
         findsOneWidget);
+  });
+
+  group('options menu', () {
+    Future<void> openMenu(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('offers the same song actions as a song row', (tester) async {
+      await pumpPlayer(tester);
+      await openMenu(tester);
+
+      for (final label in [
+        'Add to queue',
+        'Add to playlist',
+        'Download',
+        'Go to album',
+        'Go to artist',
+        'Start radio',
+        'Share as picture',
+        'Song info',
+      ]) {
+        expect(find.text(label), findsOneWidget, reason: label);
+      }
+      // Queue-only and admin-only actions stay out.
+      expect(find.text('Remove from queue'), findsNothing);
+      expect(find.text('Delete song'), findsNothing);
+    });
+
+    testWidgets('"Add to playlist" targets the song that is playing',
+        (tester) async {
+      when(() => client.getPlaylists()).thenAnswer((_) async => []);
+      await pumpPlayer(tester);
+      await openMenu(tester);
+
+      await tester.tap(find.text('Add to playlist'));
+      await tester.pumpAndSettle();
+
+      final dialog =
+          tester.widget<AddToPlaylistDialog>(find.byType(AddToPlaylistDialog));
+      expect(dialog.songId, 'a');
+    });
+
+    testWidgets('"Download" downloads the song that is playing',
+        (tester) async {
+      when(() => downloads.download(any(), client)).thenAnswer((_) async {});
+      await pumpPlayer(tester);
+      await openMenu(tester);
+
+      await tester.tap(find.text('Download'));
+      await tester.pumpAndSettle();
+
+      final saved = verify(() => downloads.download(captureAny(), client))
+          .captured
+          .single as Song;
+      expect(saved.id, 'a');
+    });
   });
 }
