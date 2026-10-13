@@ -32,6 +32,7 @@ import 'theme.dart';
 import 'tv/tv_detection.dart';
 import 'tv/tv_router.dart';
 import 'widgets/splash_overlay.dart';
+import 'widgets/app_scroll_behavior.dart';
 
 // Notifies GoRouter to re-run `redirect` whenever auth state changes.
 class _AuthRefreshNotifier extends ChangeNotifier {
@@ -238,6 +239,7 @@ class _RiffPlayerAppState extends ConsumerState<RiffPlayerApp>
         child: SplashOverlay(child: child ?? const SizedBox.shrink()),
       ),
       scaffoldMessengerKey: rootMessengerKey,
+      scrollBehavior: const AppScrollBehavior(),
       debugShowCheckedModeBanner: false,
     );
   }
