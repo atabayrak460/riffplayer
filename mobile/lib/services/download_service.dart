@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -23,7 +24,7 @@ class DownloadService {
     final dbPath = p.join(await getDatabasesPath(), 'cadence_downloads.db');
     _db = await openDatabase(
       dbPath,
-      version: 3,
+      version: 4,
       onCreate: (db, _) async {
         await db.execute('''
           CREATE TABLE downloads (
@@ -36,7 +37,8 @@ class DownloadService {
             cover_local_path TEXT,
             file_size  INTEGER,
             downloaded_at INTEGER NOT NULL,
-            is_standalone INTEGER NOT NULL DEFAULT 1
+            is_standalone INTEGER NOT NULL DEFAULT 1,
+            lyrics_json TEXT
           )
         ''');
         await _createPlaylistTables(db);
@@ -53,6 +55,12 @@ class DownloadService {
           // existing rows and the column's default for future inserts.
           await db.execute(
               'ALTER TABLE downloads ADD COLUMN is_standalone INTEGER NOT NULL DEFAULT 1');
+        }
+        if (oldVersion < 4) {
+          // Lyrics saved with the track so they show offline. Songs
+          // downloaded before this have none until they are first opened
+          // online (see lyricsProvider).
+          await db.execute('ALTER TABLE downloads ADD COLUMN lyrics_json TEXT');
         }
       },
     );
@@ -119,6 +127,28 @@ class DownloadService {
   Future<bool> isDownloaded(String trackId) async =>
       (await localPath(trackId)) != null;
 
+  /// The lyrics saved with a downloaded track, if any.
+  Future<Lyrics?> localLyrics(String trackId) async {
+    final db = await _database;
+    final rows = await db.query('downloads',
+        columns: ['lyrics_json'], where: 'track_id = ?', whereArgs: [trackId]);
+    final json = rows.isEmpty ? null : rows.first['lyrics_json'] as String?;
+    if (json == null) return null;
+    try {
+      return Lyrics.fromJson(jsonDecode(json) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Stores [lyrics] for an already-downloaded track (songs downloaded before
+  /// lyrics were saved pick theirs up the first time they are shown online).
+  Future<void> saveLyrics(String trackId, Lyrics lyrics) async {
+    final db = await _database;
+    await db.update('downloads', {'lyrics_json': jsonEncode(lyrics.toJson())},
+        where: 'track_id = ?', whereArgs: [trackId]);
+  }
+
   // ── Download ─────────────────────────────────────────────────────────────────
 
   /// [standalone] marks whether this call itself represents the user
@@ -152,8 +182,11 @@ class DownloadService {
       );
       final fileSize = File(savePath).lengthSync();
       final coverPath = await _downloadCoverArt(song, client, cancelToken);
+      // Best effort: getLyrics() returns null on any failure, and a song
+      // without lyrics is no reason to fail the download.
+      final lyrics = await client.getLyrics(song.id);
       await _saveRecord(song, savePath, fileSize, coverPath,
-          standalone: standalone);
+          standalone: standalone, lyrics: lyrics);
     } catch (e) {
       // Clean up partial file
       final f = File(savePath);
@@ -405,6 +438,7 @@ class DownloadService {
     int fileSize,
     String? coverPath, {
     required bool standalone,
+    Lyrics? lyrics,
   }) async {
     final db = await _database;
     final existing = await db.query('downloads',
@@ -427,6 +461,7 @@ class DownloadService {
         'file_size': fileSize,
         'downloaded_at': DateTime.now().millisecondsSinceEpoch,
         'is_standalone': (standalone || wasStandalone) ? 1 : 0,
+        'lyrics_json': lyrics == null ? null : jsonEncode(lyrics.toJson()),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );

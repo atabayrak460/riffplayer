@@ -768,9 +768,25 @@ final downloadedPlaylistTracksProvider = FutureProvider.autoDispose
 
 final lyricsProvider =
     FutureProvider.autoDispose.family<Lyrics?, String>((ref, songId) async {
+  final downloads = ref.read(downloadServiceProvider);
+  // A downloaded song's lyrics were saved with it, so they show offline too.
+  try {
+    final saved = await downloads.localLyrics(songId);
+    if (saved != null) return saved;
+  } catch (_) {}
+
   final client = ref.read(apiClientProvider);
   if (client == null) throw Exception('Not authenticated');
-  return client.getLyrics(songId);
+  final lyrics = await client.getLyrics(songId);
+  if (lyrics != null) {
+    // Downloaded before lyrics were saved: keep them from now on.
+    try {
+      if (await downloads.isDownloaded(songId)) {
+        await downloads.saveLyrics(songId, lyrics);
+      }
+    } catch (_) {}
+  }
+  return lyrics;
 });
 
 /// Whether the full-screen player is currently showing the lyrics view

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:riffplayer_mobile/api/types.dart';
 import 'package:riffplayer_mobile/services/download_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -452,6 +453,103 @@ void main() {
       await service.deleteDownloadedPlaylist('p1');
       expect(await service.localPath('old'), file.path);
       expect(file.existsSync(), isTrue);
+    });
+  });
+
+  group('lyrics', () {
+    const synced = Lyrics(synced: true, line: [
+      LyricsLine(start: 1000, value: 'first line'),
+      LyricsLine(start: 4500, value: 'second line'),
+    ]);
+
+    test('a downloaded track has no lyrics until some are saved', () async {
+      await _seedRow(service, tempDir, trackId: 'a', fileExists: true);
+      expect(await service.localLyrics('a'), isNull);
+      expect(await service.localLyrics('missing'), isNull);
+    });
+
+    test('saved lyrics come back intact, including timing', () async {
+      await _seedRow(service, tempDir, trackId: 'a', fileExists: true);
+
+      await service.saveLyrics('a', synced);
+      final back = await service.localLyrics('a');
+
+      expect(back, isNotNull);
+      expect(back!.synced, isTrue);
+      expect(back.line.map((l) => (l.start, l.value)),
+          [(1000, 'first line'), (4500, 'second line')]);
+    });
+
+    test('lyrics go away with the download', () async {
+      await _seedRow(service, tempDir, trackId: 'a', fileExists: true);
+      await service.saveLyrics('a', synced);
+
+      await service.deleteDownload('a');
+
+      expect(await service.localLyrics('a'), isNull);
+    });
+
+    test(
+        'upgrading from the pre-lyrics schema (v3) keeps existing rows and '
+        'makes lyrics storable', () async {
+      final dbPath = p.join(await getDatabasesPath(), 'cadence_downloads.db');
+      final v3Db = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(
+          version: 3,
+          onCreate: (db, _) async {
+            await db.execute('''
+              CREATE TABLE downloads (
+                track_id   TEXT PRIMARY KEY,
+                local_path TEXT NOT NULL,
+                title      TEXT NOT NULL,
+                artist     TEXT NOT NULL,
+                album      TEXT NOT NULL,
+                cover_art_id TEXT,
+                cover_local_path TEXT,
+                file_size  INTEGER,
+                downloaded_at INTEGER NOT NULL,
+                is_standalone INTEGER NOT NULL DEFAULT 1
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE downloaded_playlists (
+                playlist_id TEXT PRIMARY KEY,
+                name        TEXT NOT NULL,
+                comment     TEXT,
+                cover_local_path TEXT,
+                downloaded_at INTEGER NOT NULL
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE playlist_download_tracks (
+                playlist_id TEXT NOT NULL,
+                track_id    TEXT NOT NULL,
+                PRIMARY KEY (playlist_id, track_id)
+              )
+            ''');
+          },
+        ),
+      );
+      final file = File(p.join(tempDir.path, 'old.mp3'))
+        ..writeAsBytesSync([1, 2, 3]);
+      await v3Db.insert('downloads', {
+        'track_id': 'old',
+        'local_path': file.path,
+        'title': 'Pre-lyrics track',
+        'artist': 'Artist',
+        'album': 'Album',
+        'file_size': 3,
+        'downloaded_at': DateTime.now().millisecondsSinceEpoch,
+      });
+      await v3Db.close();
+
+      final downloads = await service.getDownloads();
+
+      expect(downloads.single.title, 'Pre-lyrics track');
+      expect(await service.localLyrics('old'), isNull);
+      await service.saveLyrics('old', synced);
+      expect((await service.localLyrics('old'))!.line, hasLength(2));
     });
   });
 }

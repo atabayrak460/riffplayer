@@ -634,6 +634,8 @@ class LyricsLine {
         start: (j['start'] as num?)?.toInt() ?? 0,
         value: j['value'] as String? ?? '',
       );
+
+  Map<String, dynamic> toJson() => {'start': start, 'value': value};
 }
 
 class Lyrics {
@@ -648,6 +650,9 @@ class Lyrics {
             .map((l) => LyricsLine.fromJson(l as Map<String, dynamic>))
             .toList(),
       );
+
+  Map<String, dynamic> toJson() =>
+      {'synced': synced, 'line': line.map((l) => l.toJson()).toList()};
 }
 
 /// Per-user pin/recency state for a single Library sidebar entry — either a

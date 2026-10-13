@@ -11,7 +11,7 @@ import 'package:riffplayer_mobile/widgets/song_cover.dart';
 
 import '../helpers/mocks.dart';
 
-final _song = Song(
+const _song = Song(
   id: 's1',
   title: 'T',
   artist: 'A',
@@ -39,7 +39,7 @@ void main() {
         downloadServiceProvider.overrideWithValue(downloads),
         apiClientProvider.overrideWithValue(client),
       ],
-      child: MaterialApp(
+      child: const MaterialApp(
         home: Scaffold(
           body: SongCover(song: _song, size: 44, remoteSize: 100),
         ),
