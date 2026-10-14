@@ -1,5 +1,5 @@
 import { useRadioStore } from '../store/radio';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -68,6 +68,7 @@ export function PlaylistDetailPage() {
   const downloadState = useDownloadsStore((s) => (id ? s.playlistState(id) : undefined));
   const requestDownload = useDownloadsStore((s) => s.requestDownload);
   const removePlaylistDownload = useDownloadsStore((s) => s.removePlaylistDownload);
+  const syncPlaylistDownload = useDownloadsStore((s) => s.syncPlaylistDownload);
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
   const [editingDescription, setEditingDescription] = useState(false);
@@ -79,6 +80,12 @@ export function PlaylistDetailPage() {
     queryFn: () => getPlaylist(id!),
     enabled: !!id,
   });
+
+  // A downloaded playlist keeps itself complete: what was added since (here
+  // or on another device) is fetched now, what was removed is released.
+  useEffect(() => {
+    if (playlist) syncPlaylistDownload(playlist, playlist.entry ?? []).catch(() => {});
+  }, [playlist, syncPlaylistDownload]);
 
   // Also drives the "date added" column on every row, not just the sort toggle —
   // switching sort views itself is purely a client-side transform and never

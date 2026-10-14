@@ -143,6 +143,18 @@ export async function saveTrack(
   await tx.done;
 }
 
+/** Adds `retainTag` to a track that is already on the device. False if it isn't. */
+export async function retainTrack(trackId: string, retainTag: RetainTag): Promise<boolean> {
+  const db = await getDb();
+  const tx = db.transaction('trackMeta', 'readwrite');
+  const existing = await tx.store.get(trackId);
+  if (existing && !existing.retainedBy.includes(retainTag)) {
+    await tx.store.put({ ...existing, retainedBy: [...existing.retainedBy, retainTag] });
+  }
+  await tx.done;
+  return !!existing;
+}
+
 /**
  * Remove one retain reason from a track. Once no reason remains, the track's
  * metadata and audio blob are deleted entirely — this is what makes removing

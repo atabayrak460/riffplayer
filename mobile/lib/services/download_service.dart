@@ -353,22 +353,99 @@ class DownloadService {
     }
 
     for (final trackId in memberIds) {
-      final stillInAnotherPlaylist = Sqflite.firstIntValue(await db.rawQuery(
-            'SELECT COUNT(*) FROM playlist_download_tracks WHERE track_id = ?',
-            [trackId],
-          )) ??
-          0;
-      if (stillInAnotherPlaylist > 0) continue;
+      await _releaseTrack(db, trackId);
+    }
+  }
 
-      final trackRows = await db.query('downloads',
-          columns: ['is_standalone'],
-          where: 'track_id = ?',
-          whereArgs: [trackId]);
-      final isStandalone = trackRows.isNotEmpty &&
-          (trackRows.first['is_standalone'] as int) == 1;
-      if (!isStandalone) {
-        await deleteDownload(trackId);
+  /// Deletes a track's file once nothing needs it any more: it is neither a
+  /// member of another downloaded playlist nor downloaded on its own.
+  Future<void> _releaseTrack(Database db, String trackId) async {
+    final stillInAnotherPlaylist = Sqflite.firstIntValue(await db.rawQuery(
+          'SELECT COUNT(*) FROM playlist_download_tracks WHERE track_id = ?',
+          [trackId],
+        )) ??
+        0;
+    if (stillInAnotherPlaylist > 0) return;
+
+    final trackRows = await db.query('downloads',
+        columns: ['is_standalone'],
+        where: 'track_id = ?',
+        whereArgs: [trackId]);
+    final isStandalone =
+        trackRows.isNotEmpty && (trackRows.first['is_standalone'] as int) == 1;
+    if (!isStandalone) {
+      await deleteDownload(trackId);
+    }
+  }
+
+  final Set<String> _syncing = {};
+
+  /// Brings a downloaded playlist up to date with its server copy: tracks
+  /// added since are downloaded, tracks removed since are released (their
+  /// file is deleted unless something else still needs it), and the stored
+  /// name and description follow. Does nothing for a playlist that was never
+  /// downloaded. A track that fails to download is left out of the grouping
+  /// and retried by the next sync. Returns how many tracks were added or removed.
+  ///
+  /// [fetch] downloads one track; it defaults to [download] and exists so
+  /// tests don't need a network.
+  Future<int> syncDownloadedPlaylist(
+    Playlist playlist,
+    List<Song> songs,
+    SubsonicClient client, {
+    Future<void> Function(Song song)? fetch,
+  }) async {
+    final db = await _database;
+    final known = await db.query('downloaded_playlists',
+        columns: ['playlist_id'],
+        where: 'playlist_id = ?',
+        whereArgs: [playlist.id]);
+    if (known.isEmpty || !_syncing.add(playlist.id)) return 0;
+    try {
+      final memberRows = await db.query('playlist_download_tracks',
+          columns: ['track_id'],
+          where: 'playlist_id = ?',
+          whereArgs: [playlist.id]);
+      final members = memberRows.map((r) => r['track_id'] as String).toSet();
+      final wanted = songs.map((s) => s.id).toSet();
+
+      var changed = 0;
+      for (final song in songs) {
+        if (members.contains(song.id)) continue;
+        try {
+          if (!await isDownloaded(song.id)) {
+            await (fetch ??
+                (s) => download(s, client, standalone: false))(song);
+          }
+        } catch (_) {
+          continue;
+        }
+        await db.insert(
+          'playlist_download_tracks',
+          {'playlist_id': playlist.id, 'track_id': song.id},
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        members.add(song.id);
+        changed++;
       }
+
+      for (final trackId in members.difference(wanted)) {
+        await db.delete('playlist_download_tracks',
+            where: 'playlist_id = ? AND track_id = ?',
+            whereArgs: [playlist.id, trackId]);
+        await _releaseTrack(db, trackId);
+        changed++;
+      }
+
+      await db.update(
+        'downloaded_playlists',
+        {'name': playlist.name, 'comment': playlist.comment},
+        where: 'playlist_id = ?',
+        whereArgs: [playlist.id],
+      );
+      return changed;
+    } finally {
+      _syncing.remove(playlist.id);
     }
   }
 

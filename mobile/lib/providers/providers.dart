@@ -772,8 +772,32 @@ final playlistDetailProvider =
     FutureProvider.autoDispose.family<Playlist, String>((ref, id) async {
   final client = ref.read(apiClientProvider);
   if (client == null) throw Exception('Not authenticated');
-  return client.getPlaylist(id);
+  final playlist = await client.getPlaylist(id);
+  _syncDownloadedPlaylist(ref, client, playlist);
+  return playlist;
 });
+
+/// If this playlist is downloaded, fetches what was added to it since (and
+/// drops what was removed), so a downloaded playlist stays fully offline
+/// without downloading it again. Runs in the background; nothing waits on it.
+void _syncDownloadedPlaylist(
+    Ref ref, SubsonicClient client, Playlist playlist) {
+  ref
+      .read(downloadServiceProvider)
+      .syncDownloadedPlaylist(playlist, playlist.entries ?? [], client)
+      .then((changed) {
+        if (changed == 0) return;
+        // The provider that started this may be gone by now.
+        try {
+          ref.invalidate(downloadsProvider);
+          ref.invalidate(downloadedPlaylistsProvider);
+          ref.invalidate(downloadedPlaylistProvider(playlist.id));
+          ref.invalidate(downloadedPlaylistTracksProvider(playlist.id));
+        } catch (_) {}
+      })
+      .catchError((_) {})
+      .ignore();
+}
 
 /// When each track was added to this playlist — drives the "date added"
 /// column and the "sort by date added" view on the playlist detail screen.

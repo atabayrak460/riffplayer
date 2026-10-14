@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPlaylists, getPlaylist, addSongToPlaylist, createPlaylistWithName } from '../api/subsonic';
 import { useToastStore } from '../store/toast';
+import { useDownloadsStore } from '../store/downloads';
 import type { Playlist } from '../api/types';
 import { Modal } from './Modal';
 
@@ -26,7 +27,15 @@ export function AddToPlaylistDialog({ songId, onClose }: Props) {
       return true;
     },
     onSuccess: (added, playlist) => {
-      if (added) qc.invalidateQueries({ queryKey: ['playlist', playlist.id] });
+      if (added) {
+        qc.invalidateQueries({ queryKey: ['playlist', playlist.id] });
+        // A downloaded playlist gets the new song offline too.
+        if (useDownloadsStore.getState().playlistState(playlist.id) === 'downloaded') {
+          void getPlaylist(playlist.id)
+            .then((fresh) => useDownloadsStore.getState().syncPlaylistDownload(fresh, fresh.entry ?? []))
+            .catch(() => {});
+        }
+      }
       else showToast(`Already in "${playlist.name}"`);
       onClose();
     },

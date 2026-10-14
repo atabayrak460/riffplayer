@@ -39,6 +39,12 @@ interface DownloadsState {
 
   downloadPlaylist: (playlist: Playlist, songs: Song[]) => Promise<void>;
   removePlaylistDownload: (playlistId: string) => Promise<void>;
+  /**
+   * Brings a downloaded playlist up to date with the server's copy: tracks
+   * added since are downloaded, removed ones released. No-op for a playlist
+   * that isn't downloaded.
+   */
+  syncPlaylistDownload: (playlist: Playlist, songs: Song[]) => Promise<void>;
 
   saveToDevice: (song: Song) => Promise<void>;
 }
@@ -92,6 +98,8 @@ async function performRequest(
     await get().downloadPlaylist(req.playlist, req.songs);
   }
 }
+
+const syncingPlaylists = new Set<string>();
 
 export const useDownloadsStore = create<DownloadsState>()(
   persist(
@@ -200,6 +208,51 @@ export const useDownloadsStore = create<DownloadsState>()(
       removePlaylistDownload: async (playlistId) => {
         await offlineDb.removePlaylistDownload(playlistId);
         await get().hydrate();
+      },
+
+      syncPlaylistDownload: async (playlist, songs) => {
+        const meta = await offlineDb.getDownloadedPlaylist(playlist.id);
+        if (!meta || syncingPlaylists.has(playlist.id)) return;
+        syncingPlaylists.add(playlist.id);
+        try {
+          const tag = `playlist:${playlist.id}` as RetainTag;
+          const members = new Set(meta.trackIds);
+          const wanted = new Set(songs.map((s) => s.id));
+          let changed = false;
+
+          for (const song of songs) {
+            if (members.has(song.id)) continue;
+            try {
+              // Already on the device (downloaded on its own, say): just keep it for this playlist too.
+              if (!(await offlineDb.retainTrack(song.id, tag))) await fetchAndSaveTrack(song, tag);
+            } catch {
+              continue; // left out; the next sync retries it
+            }
+            members.add(song.id);
+            changed = true;
+            set((s) => ({ status: { ...s.status, [`t:${song.id}`]: 'downloaded' } }));
+          }
+
+          const removed = [...members].filter((id) => !wanted.has(id));
+          for (const id of removed) {
+            await offlineDb.releaseTrack(id, tag);
+            members.delete(id);
+            changed = true;
+          }
+
+          const renamed = meta.name !== playlist.name || meta.comment !== playlist.comment;
+          if (changed || renamed) {
+            await offlineDb.savePlaylist({
+              ...meta,
+              name: playlist.name,
+              comment: playlist.comment,
+              trackIds: songs.map((s) => s.id).filter((id) => members.has(id)),
+            });
+          }
+          if (removed.length) await get().hydrate();
+        } finally {
+          syncingPlaylists.delete(playlist.id);
+        }
       },
 
       saveToDevice: async (song) => {

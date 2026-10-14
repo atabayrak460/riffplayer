@@ -184,6 +184,77 @@ describe('downloadPlaylist / removePlaylistDownload', () => {
   });
 });
 
+describe('syncPlaylistDownload', () => {
+  it('does nothing for a playlist that was never downloaded', async () => {
+    mockFetchOk();
+
+    await useDownloadsStore.getState().syncPlaylistDownload(playlist('9'), [song('1')]);
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(await offlineDb.getAllDownloadedTracks()).toHaveLength(0);
+  });
+
+  it('downloads a track added to the playlist since and groups it', async () => {
+    mockFetchOk();
+    await useDownloadsStore.getState().downloadPlaylist(playlist('9'), [song('1')]);
+
+    await useDownloadsStore.getState().syncPlaylistDownload(playlist('9'), [song('1'), song('2')]);
+
+    expect(useDownloadsStore.getState().trackState('2')).toBe('downloaded');
+    expect((await offlineDb.getDownloadedPlaylist('9'))?.trackIds).toEqual(['1', '2']);
+    const two = (await offlineDb.getAllDownloadedTracks()).find((t) => t.id === '2');
+    expect(two?.retainedBy).toEqual(['playlist:9']);
+  });
+
+  it('keeps a track that is already on the device instead of fetching it again', async () => {
+    mockFetchOk();
+    await useDownloadsStore.getState().downloadPlaylist(playlist('9'), [song('1')]);
+    await useDownloadsStore.getState().downloadTrack(song('2'));
+    vi.mocked(fetch).mockClear();
+
+    await useDownloadsStore.getState().syncPlaylistDownload(playlist('9'), [song('1'), song('2')]);
+
+    expect(fetch).not.toHaveBeenCalled();
+    const two = (await offlineDb.getAllDownloadedTracks()).find((t) => t.id === '2');
+    expect(two?.retainedBy.sort()).toEqual(['individual', 'playlist:9']);
+  });
+
+  it('a failed download is left out and retried by the next sync', async () => {
+    mockFetchOk();
+    await useDownloadsStore.getState().downloadPlaylist(playlist('9'), [song('1')]);
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+
+    await useDownloadsStore.getState().syncPlaylistDownload(playlist('9'), [song('1'), song('2')]);
+    expect((await offlineDb.getDownloadedPlaylist('9'))?.trackIds).toEqual(['1']);
+
+    mockFetchOk();
+    await useDownloadsStore.getState().syncPlaylistDownload(playlist('9'), [song('1'), song('2')]);
+    expect((await offlineDb.getDownloadedPlaylist('9'))?.trackIds).toEqual(['1', '2']);
+  });
+
+  it('releases a track removed from the playlist, but not one also downloaded individually', async () => {
+    mockFetchOk();
+    await useDownloadsStore.getState().downloadTrack(song('2'));
+    await useDownloadsStore.getState().downloadPlaylist(playlist('9'), [song('1'), song('2')]);
+
+    await useDownloadsStore.getState().syncPlaylistDownload(playlist('9'), []);
+
+    expect(await offlineDb.isTrackDownloaded('1')).toBe(false);
+    expect(useDownloadsStore.getState().trackState('1')).toBeUndefined();
+    expect(await offlineDb.isTrackDownloaded('2')).toBe(true);
+    expect((await offlineDb.getDownloadedPlaylist('9'))?.trackIds).toEqual([]);
+  });
+
+  it('keeps the stored name in step with the playlist', async () => {
+    mockFetchOk();
+    await useDownloadsStore.getState().downloadPlaylist(playlist('9', 'Old'), [song('1')]);
+
+    await useDownloadsStore.getState().syncPlaylistDownload(playlist('9', 'Renamed'), [song('1')]);
+
+    expect((await offlineDb.getDownloadedPlaylist('9'))?.name).toBe('Renamed');
+  });
+});
+
 describe('saveToDevice', () => {
   it('fetches the audio and triggers a browser download without touching offline storage', async () => {
     mockFetchOk();

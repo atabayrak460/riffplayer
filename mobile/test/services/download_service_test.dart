@@ -3,8 +3,11 @@ import 'dart:io';
 import 'package:riffplayer_mobile/api/types.dart';
 import 'package:riffplayer_mobile/services/download_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import '../helpers/mocks.dart';
 
 // DownloadService has no public write method that doesn't also require a
 // real network download (SubsonicClient.downloadTrack), so rows are seeded
@@ -276,6 +279,111 @@ void main() {
       final tracks = await service.getDownloadedPlaylistTracks('p1');
 
       expect(tracks.map((t) => t.trackId).toSet(), {'a', 'b'});
+    });
+
+    group('syncDownloadedPlaylist', () {
+      Playlist pl({String name = 'Playlist'}) => Playlist(
+          id: 'p1', name: name, owner: 'me', songCount: 0, duration: 0);
+      Song song(String id) => Song(
+          id: id,
+          title: 'Title $id',
+          artist: 'Artist',
+          artistId: 'ar',
+          album: 'Album',
+          albumId: 'al',
+          suffix: 'mp3',
+          duration: 100);
+
+      test('ignores a playlist that was never downloaded', () async {
+        final fetched = <String>[];
+        final added = await service.syncDownloadedPlaylist(
+            pl(), [song('a')], MockSubsonicClient(),
+            fetch: (s) async => fetched.add(s.id));
+
+        expect(added, 0);
+        expect(fetched, isEmpty);
+        expect(await service.getDownloadedPlaylist('p1'), isNull);
+      });
+
+      test('downloads a track added to the playlist and groups it', () async {
+        await _seedRow(service, tempDir,
+            trackId: 'a', fileExists: true, isStandalone: false);
+        await _seedPlaylistRow(service, playlistId: 'p1');
+        await _seedPlaylistMembership(service, playlistId: 'p1', trackId: 'a');
+
+        final fetched = <String>[];
+        final added = await service.syncDownloadedPlaylist(
+            pl(), [song('a'), song('b')], MockSubsonicClient(),
+            fetch: (s) async {
+          fetched.add(s.id);
+          await _seedRow(service, tempDir,
+              trackId: s.id, fileExists: true, isStandalone: false);
+        });
+
+        expect(added, 1);
+        expect(fetched, ['b']);
+        final tracks = await service.getDownloadedPlaylistTracks('p1');
+        expect(tracks.map((t) => t.trackId), unorderedEquals(['a', 'b']));
+      });
+
+      test('does not fetch a track that is already on the device', () async {
+        await _seedRow(service, tempDir,
+            trackId: 'b', fileExists: true, isStandalone: true);
+        await _seedPlaylistRow(service, playlistId: 'p1');
+
+        final fetched = <String>[];
+        await service.syncDownloadedPlaylist(
+            pl(), [song('b')], MockSubsonicClient(),
+            fetch: (s) async => fetched.add(s.id));
+
+        expect(fetched, isEmpty);
+        expect((await service.getDownloadedPlaylistTracks('p1')).single.trackId,
+            'b');
+      });
+
+      test('a failed download is left out and retried by the next sync',
+          () async {
+        await _seedPlaylistRow(service, playlistId: 'p1');
+
+        var added = await service.syncDownloadedPlaylist(
+            pl(), [song('b')], MockSubsonicClient(),
+            fetch: (_) async => throw Exception('offline'));
+        expect(added, 0);
+        expect(await service.getDownloadedPlaylistTracks('p1'), isEmpty);
+
+        added = await service.syncDownloadedPlaylist(
+            pl(), [song('b')], MockSubsonicClient(), fetch: (s) async {
+          await _seedRow(service, tempDir,
+              trackId: s.id, fileExists: true, isStandalone: false);
+        });
+        expect(added, 1);
+      });
+
+      test('a track removed from the playlist is released and deleted',
+          () async {
+        final gone = await _seedRow(service, tempDir,
+            trackId: 'a', fileExists: true, isStandalone: false);
+        final kept = await _seedRow(service, tempDir,
+            trackId: 'b', fileExists: true, isStandalone: true);
+        await _seedPlaylistRow(service, playlistId: 'p1');
+        await _seedPlaylistMembership(service, playlistId: 'p1', trackId: 'a');
+        await _seedPlaylistMembership(service, playlistId: 'p1', trackId: 'b');
+
+        await service.syncDownloadedPlaylist(pl(), [], MockSubsonicClient());
+
+        expect(gone.existsSync(), isFalse);
+        expect(kept.existsSync(), isTrue); // also downloaded on its own
+        expect(await service.getDownloadedPlaylistTracks('p1'), isEmpty);
+      });
+
+      test('keeps the stored name in step with the playlist', () async {
+        await _seedPlaylistRow(service, playlistId: 'p1', name: 'Old');
+
+        await service.syncDownloadedPlaylist(
+            pl(name: 'Renamed'), [], MockSubsonicClient());
+
+        expect((await service.getDownloadedPlaylist('p1'))!.name, 'Renamed');
+      });
     });
 
     group('deleteDownloadedPlaylist', () {

@@ -91,6 +91,12 @@ class AddToPlaylistDialog extends ConsumerWidget {
                                 } else {
                                   await client.addSongToPlaylist(pl.id, songId);
                                   ref.invalidate(playlistDetailProvider(pl.id));
+                                  // Re-reading it also tops up the offline
+                                  // copy if this playlist is downloaded.
+                                  ref
+                                      .read(
+                                          playlistDetailProvider(pl.id).future)
+                                      .ignore();
                                   message = 'Added to "${pl.name}"';
                                 }
                               } catch (_) {
