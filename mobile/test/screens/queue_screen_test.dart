@@ -156,6 +156,20 @@ void main() {
   });
 
   testWidgets(
+      'next up starts after the playing song when earlier songs are queued '
+      '(playing from the middle of a list)', (tester) async {
+    player.setTestState(PlayerState(
+        queue: [song('a'), song('b'), song('c'), song('d')], currentIndex: 2));
+    await pump(tester);
+
+    // Only "d" is next; "a" and "b" were before the playing "c".
+    expect(find.text('Title c'), findsOneWidget); // now playing
+    expect(find.text('Title d'), findsOneWidget);
+    expect(find.text('Title a'), findsNothing);
+    expect(find.text('Title b'), findsNothing);
+  });
+
+  testWidgets(
       'shows the other device\'s queue instead, names it, and hides "Clear"',
       (tester) async {
     player.setTestState(PlayerState(queue: [song('mine')], currentIndex: 0));

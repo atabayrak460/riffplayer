@@ -61,7 +61,10 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
     } else {
       queue = state.queue;
       current = state.currentSong;
-      base = 1;
+      // The queue can hold songs before the playing one (playing from the
+      // middle of a list), so "next up" starts after the playing index, not
+      // after the first entry.
+      base = state.currentIndex >= 0 ? state.currentIndex + 1 : 1;
     }
     // Everything after the currently playing item — its own reorderable,
     // removable list. The current song itself is shown separately below
