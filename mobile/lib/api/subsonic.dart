@@ -357,6 +357,13 @@ class SubsonicClient {
         {'playlistId': playlistId, 'songIdToAdd': songId},
       );
 
+  /// Removes the track at [index] (its position in the playlist, not its
+  /// song id: the server addresses entries by position).
+  Future<void> removeSongFromPlaylist(String playlistId, int index) => _get(
+        'updatePlaylist.view',
+        {'playlistId': playlistId, 'songIndexToRemove': '$index'},
+      );
+
   // ── Custom /api/v1 endpoints (Subsonic auth doesn't cover these) ────────────
 
   Future<Map<String, dynamic>> _apiCall(

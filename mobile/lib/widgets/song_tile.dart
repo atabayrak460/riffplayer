@@ -35,8 +35,10 @@ class SongTile extends ConsumerWidget {
   /// within the existing queue instead of replacing it.
   final VoidCallback? onTap;
 
-  /// When set, adds a "Remove from queue" action to the overflow menu.
+  /// When set, adds a remove action to the overflow menu and a swipe-left
+  /// gesture, labelled [removeLabel].
   final VoidCallback? onRemove;
+  final String removeLabel;
 
   const SongTile({
     super.key,
@@ -48,6 +50,7 @@ class SongTile extends ConsumerWidget {
     this.addedAt,
     this.onTap,
     this.onRemove,
+    this.removeLabel = 'Remove from queue',
   });
 
   Widget _subtitleLine() => Text(
@@ -142,7 +145,9 @@ class SongTile extends ConsumerWidget {
               child: Icon(Icons.more_vert, color: AppColors.muted, size: 18),
             ),
             itemBuilder: (_) => songMenuEntries(song,
-                isAdmin: isAdmin, canRemove: onRemove != null),
+                isAdmin: isAdmin,
+                canRemove: onRemove != null,
+                removeLabel: removeLabel),
             onSelected: (v) =>
                 handleSongAction(v, context, ref, song, onRemove: onRemove),
           ),

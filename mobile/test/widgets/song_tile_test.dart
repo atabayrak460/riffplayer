@@ -56,6 +56,7 @@ void main() {
     Song? nowPlaying,
     bool showAlbum = false,
     DateTime? addedAt,
+    String? removeLabel,
   }) async {
     final notifier = PlayerNotifier(handler);
     if (nowPlaying != null) {
@@ -75,6 +76,7 @@ void main() {
               song: song,
               queue: queue,
               onRemove: onRemove,
+              removeLabel: removeLabel ?? 'Remove from queue',
               showAlbum: showAlbum,
               addedAt: addedAt,
             ),
@@ -206,6 +208,22 @@ void main() {
       await tester.tap(find.byIcon(Icons.more_vert));
       await tester.pumpAndSettle();
       expect(find.text('Remove from queue'), findsOneWidget);
+    });
+
+    testWidgets('removeLabel renames the remove action', (tester) async {
+      var removed = false;
+      await pumpTile(tester,
+          song: _song('a'),
+          onRemove: () => removed = true,
+          removeLabel: 'Remove from playlist');
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      expect(find.text('Remove from queue'), findsNothing);
+      await tester.tap(find.text('Remove from playlist'));
+      await tester.pumpAndSettle();
+
+      expect(removed, isTrue);
     });
 
     testWidgets('"Remove from queue" calls the onRemove callback',

@@ -263,6 +263,8 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                     index: i,
                     showAlbum: true,
                     addedAt: dates?[songs[i].id],
+                    removeLabel: 'Remove from playlist',
+                    onRemove: () => _removeAt(context, ref, i),
                   ),
                 )
               else
@@ -275,6 +277,11 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                     index: i,
                     showAlbum: true,
                     addedAt: dates?[displayed[i].id],
+                    removeLabel: 'Remove from playlist',
+                    // The server addresses tracks by their position in the
+                    // playlist, which a sorted view has shuffled.
+                    onRemove: () => _removeAt(context, ref,
+                        songs.indexWhere((s) => identical(s, displayed[i]))),
                   ),
                 ),
               const SizedBox(height: 80),
@@ -283,6 +290,22 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
         );
       },
     );
+  }
+
+  Future<void> _removeAt(BuildContext context, WidgetRef ref, int index) async {
+    final client = ref.read(apiClientProvider);
+    if (client == null || index < 0) return;
+    try {
+      await client.removeSongFromPlaylist(widget.playlistId, index);
+    } catch (_) {
+      if (context.mounted) {
+        showFailureSnackBar(context, 'Failed to remove from playlist');
+      }
+      return;
+    }
+    ref.invalidate(playlistDetailProvider(widget.playlistId));
+    ref.invalidate(playlistsProvider);
+    if (context.mounted) showSnackBar(context, 'Removed from playlist');
   }
 
   Future<void> _reorder(

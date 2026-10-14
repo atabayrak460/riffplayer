@@ -15,12 +15,14 @@ import 'song_info_dialog.dart';
 /// The per-song overflow actions, shared by [SongTile]'s `⋮` menu and the
 /// full-screen player's menu so both offer the same things.
 ///
-/// [canRemove] adds "Remove from queue" (only meaningful on the Queue screen);
+/// [canRemove] adds a remove entry, "Remove from queue" by default (the Queue
+/// screen) or [removeLabel] (a playlist's track list);
 /// [isAdmin] adds the destructive "Delete song".
 List<PopupMenuEntry<String>> songMenuEntries(
   Song song, {
   required bool isAdmin,
   bool canRemove = false,
+  String removeLabel = 'Remove from queue',
 }) =>
     [
       const PopupMenuItem(value: 'queue', child: Text('Add to queue')),
@@ -35,8 +37,7 @@ List<PopupMenuEntry<String>> songMenuEntries(
       const PopupMenuItem(value: 'radio', child: Text('Start radio')),
       const PopupMenuItem(value: 'share', child: Text('Share as picture')),
       const PopupMenuItem(value: 'info', child: Text('Song info')),
-      if (canRemove)
-        const PopupMenuItem(value: 'remove', child: Text('Remove from queue')),
+      if (canRemove) PopupMenuItem(value: 'remove', child: Text(removeLabel)),
       if (isAdmin)
         PopupMenuItem(
           value: 'delete',
