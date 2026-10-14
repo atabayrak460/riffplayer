@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../api/types.dart';
 import '../providers/providers.dart';
 import '../app_colors.dart';
 
@@ -24,9 +25,22 @@ class LyricsView extends ConsumerStatefulWidget {
 }
 
 class _LyricsViewState extends ConsumerState<LyricsView> {
-  static const _lineHeight = 44.0;
+  // A line is at least this tall (so short and blank lines keep their
+  // spacing) and grows to as many rows as it needs: a long line wraps instead
+  // of being cut off.
+  static const _minLineHeight = 44.0;
   final _scrollController = ScrollController();
+  final _lineKeys = <int, GlobalKey>{};
   int _lastActiveIndex = -1;
+
+  @override
+  void didUpdateWidget(LyricsView old) {
+    super.didUpdateWidget(old);
+    if (old.songId != widget.songId) {
+      _lastActiveIndex = -1;
+      _lineKeys.clear();
+    }
+  }
 
   @override
   void dispose() {
@@ -34,17 +48,53 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
     super.dispose();
   }
 
-  void _scrollToActive(int index, int lineCount) {
-    if (!_scrollController.hasClients) return;
-    final viewport = _scrollController.position.viewportDimension;
-    final maxScroll =
-        (lineCount * _lineHeight - viewport).clamp(0.0, double.infinity);
-    final target = (index * _lineHeight - viewport / 2 + _lineHeight / 2)
-        .clamp(0.0, maxScroll);
-    _scrollController.animateTo(
-      target,
+  GlobalKey _keyFor(int i) => _lineKeys.putIfAbsent(i, GlobalKey.new);
+
+  // Lines differ in height now, so the active one is centred by asking its
+  // own render box rather than by multiplying an index by a fixed height.
+  void _scrollToActive(int index) {
+    final context = _lineKeys[index]?.currentContext;
+    if (context == null || !_scrollController.hasClients) return;
+    Scrollable.ensureVisible(
+      context,
+      alignment: 0.5,
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
+    );
+  }
+
+  Widget _line(Lyrics lyrics, int i, bool isActive) {
+    final line = lyrics.line[i];
+    final text = line.value;
+    // Synced lines jump playback to their timestamp on tap.
+    return GestureDetector(
+      key: ValueKey('lyric-line-$i'),
+      behavior: HitTestBehavior.opaque,
+      onTap: lyrics.synced
+          ? () => ref
+              .read(playerProvider.notifier)
+              .seek(Duration(milliseconds: line.start))
+          : null,
+      child: KeyedSubtree(
+        key: _keyFor(i),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: _minLineHeight),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Text(
+                text.isEmpty ? ' ' : text,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isActive ? AppColors.text : AppColors.muted,
+                  fontSize: isActive ? 17 : 14,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.normal,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -87,44 +137,20 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
           if (activeIndex != _lastActiveIndex && activeIndex >= 0) {
             _lastActiveIndex = activeIndex;
             final target = activeIndex;
-            final count = lyrics.line.length;
             WidgetsBinding.instance
-                .addPostFrameCallback((_) => _scrollToActive(target, count));
+                .addPostFrameCallback((_) => _scrollToActive(target));
           }
 
-          return ListView.builder(
+          // A plain scroll view rather than a lazy list: lyrics are a few dozen
+          // lines, and every line has to exist for its height to be known.
+          return SingleChildScrollView(
             controller: _scrollController,
-            itemExtent: _lineHeight,
-            itemCount: lyrics.line.length,
-            itemBuilder: (_, i) {
-              final isActive = i == activeIndex;
-              final line = lyrics.line[i];
-              final text = line.value;
-              // Synced lines jump playback to their timestamp on tap.
-              return GestureDetector(
-                key: ValueKey('lyric-line-$i'),
-                behavior: HitTestBehavior.opaque,
-                onTap: lyrics.synced
-                    ? () => ref
-                        .read(playerProvider.notifier)
-                        .seek(Duration(milliseconds: line.start))
-                    : null,
-                child: Center(
-                  child: Text(
-                    text.isEmpty ? ' ' : text,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isActive ? AppColors.text : AppColors.muted,
-                      fontSize: isActive ? 17 : 14,
-                      fontWeight:
-                          isActive ? FontWeight.w700 : FontWeight.normal,
-                    ),
-                  ),
-                ),
-              );
-            },
+            child: Column(
+              children: [
+                for (var i = 0; i < lyrics.line.length; i++)
+                  _line(lyrics, i, i == activeIndex),
+              ],
+            ),
           );
         },
       ),
