@@ -290,6 +290,11 @@ export async function addSongToPlaylist(playlistId: string, songId: string): Pro
   await get('updatePlaylist.view', { playlistId, songIdToAdd: songId });
 }
 
+/** Removes the track at `index` — its position in the playlist, which is how the server addresses entries. */
+export async function removeSongFromPlaylist(playlistId: string, index: number): Promise<void> {
+  await get('updatePlaylist.view', { playlistId, songIndexToRemove: String(index) });
+}
+
 // ── Custom /api/v1 endpoints (Subsonic auth via query params) ────────────────
 
 // JWT stored by auth store — set after login

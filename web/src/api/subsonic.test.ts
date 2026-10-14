@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
-  setCredentials, addSongToPlaylist, renamePlaylist, setPlaylistDescription,
+  setCredentials, addSongToPlaylist, removeSongFromPlaylist, renamePlaylist, setPlaylistDescription,
   createPlaylistWithName, getAllSongs, setJwt, clearCredentials,
   changeMyPassword, adminDeleteTrack, savePlayQueue, getPlayQueue,
 } from './subsonic';
@@ -32,6 +32,18 @@ describe('addSongToPlaylist', () => {
     await addSongToPlaylist('7', '42');
     const url = new URL((fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string);
     expect(url.searchParams.has('name')).toBe(false);
+  });
+});
+
+describe('removeSongFromPlaylist', () => {
+  it('calls updatePlaylist.view with the track position, not a song id', async () => {
+    await removeSongFromPlaylist('7', 3);
+
+    const url = new URL((fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string);
+    expect(url.pathname).toBe('/rest/updatePlaylist.view');
+    expect(url.searchParams.get('playlistId')).toBe('7');
+    expect(url.searchParams.get('songIndexToRemove')).toBe('3');
+    expect(url.searchParams.has('songIdToAdd')).toBe(false);
   });
 });
 

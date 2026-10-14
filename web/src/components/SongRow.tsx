@@ -30,6 +30,8 @@ interface Props {
   condensed?: boolean;
   /** Shown as the condensed row's subtitle when set (e.g. an album name) — condensed mode only. */
   condensedSubtitle?: string;
+  /** Adds a "Remove from playlist" item to the menu — set by playlist views only. */
+  onRemoveFromPlaylist?: () => void;
 }
 
 function formatDuration(s?: number) {
@@ -60,7 +62,7 @@ const ICONS = {
 };
 
 export function SongRow({
-  song, queue, index, showAlbum = false, addedAt, condensed = false, condensedSubtitle,
+  song, queue, index, showAlbum = false, addedAt, condensed = false, condensedSubtitle, onRemoveFromPlaylist,
 }: Props) {
   const navigate = useNavigate();
   const playSong = usePlayerStore((s) => s.playSong);
@@ -100,6 +102,9 @@ export function SongRow({
     { label: 'Play next', icon: ICONS.playNext, onClick: () => playNext(song) },
     { label: 'Add to queue', icon: ICONS.queue, onClick: () => addToQueue(song) },
     { label: 'Add to playlist', icon: ICONS.playlist, onClick: () => setShowAddToPlaylist(true) },
+    ...(onRemoveFromPlaylist
+      ? [{ label: 'Remove from playlist', icon: ICONS.trash, onClick: onRemoveFromPlaylist, danger: true }]
+      : []),
     downloadState === 'downloaded'
       ? { label: 'Remove download', icon: ICONS.trash, onClick: () => removeTrackDownload(song.id), danger: true }
       : { label: 'Download', icon: ICONS.download, onClick: () => requestDownload({ kind: 'track', song }) },

@@ -12,10 +12,11 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   getPlaylist, renamePlaylist, setPlaylistDescription, deletePlaylist,
-  reorderPlaylistTracks, uploadPlaylistCover, removePlaylistCover, getPlaylistTrackDates,
+  reorderPlaylistTracks, removeSongFromPlaylist, uploadPlaylistCover, removePlaylistCover, getPlaylistTrackDates,
 } from '../api/subsonic';
 import { usePlayerStore } from '../store/player';
 import { useDownloadsStore } from '../store/downloads';
+import { useToastStore } from '../store/toast';
 import { resolveDragReorderIndices } from '../lib/dragReorder';
 import { CoverUploadControl } from '../components/CoverUploadControl';
 import { sharePlaylist } from '../lib/share';
@@ -32,8 +33,8 @@ function formatDuration(s: number) {
 }
 
 function DraggableSongRow({
-  song, index, songs, addedAt,
-}: { song: Song; index: number; songs: Song[]; addedAt?: string }) {
+  song, index, songs, addedAt, onRemove,
+}: { song: Song; index: number; songs: Song[]; addedAt?: string; onRemove: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: song.id + '-' + index,
   });
@@ -53,7 +54,7 @@ function DraggableSongRow({
         </svg>
       </button>
       <div className="flex-1 min-w-0">
-        <SongRow song={song} queue={songs} index={index + 1} showAlbum addedAt={addedAt} />
+        <SongRow song={song} queue={songs} index={index + 1} showAlbum addedAt={addedAt} onRemoveFromPlaylist={onRemove} />
       </div>
     </div>
   );
@@ -168,6 +169,23 @@ export function PlaylistDetailPage() {
   const songIds = songs.map((s, i) => s.id + '-' + i);
 
   const displayedSongs = sortPlaylistTracks(songs, trackDates, sortMode);
+
+  // The server addresses tracks by position in the playlist, which a sorted
+  // view has shuffled — so map the row back to its index in `songs`.
+  const removeTrack = (song: Song) => {
+    const index = songs.indexOf(song);
+    if (index < 0) return;
+    removeSongFromPlaylist(id!, index)
+      .then(() => {
+        qc.invalidateQueries({ queryKey: ['playlist', id] });
+        qc.invalidateQueries({ queryKey: ['playlist-track-dates', id] });
+        qc.invalidateQueries({ queryKey: ['playlists'] });
+        useToastStore.getState().show('Removed from playlist');
+      })
+      .catch((e) => {
+        useToastStore.getState().show(e instanceof Error ? e.message : 'Failed to remove from playlist');
+      });
+  };
 
   const onDragEnd = (event: DragEndEvent) => {
     const resolved = resolveDragReorderIndices(songIds, String(event.active.id), event.over ? String(event.over.id) : undefined);
@@ -327,6 +345,7 @@ export function PlaylistDetailPage() {
                   index={i}
                   songs={songs}
                   addedAt={trackDates?.[song.id]}
+                  onRemove={() => removeTrack(song)}
                 />
               ))}
             </div>
@@ -342,6 +361,7 @@ export function PlaylistDetailPage() {
               index={i + 1}
               showAlbum
               addedAt={trackDates?.[song.id]}
+              onRemoveFromPlaylist={() => removeTrack(song)}
             />
           ))}
         </div>
