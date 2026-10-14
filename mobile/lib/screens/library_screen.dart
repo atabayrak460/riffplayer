@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../providers/providers.dart';
 import '../utils/library_sidebar_order.dart';
 import '../widgets/library_list_row.dart';
+import '../widgets/playlist_name_dialog.dart';
 import '../app_colors.dart';
 
 const _systemItems = <LibraryRow>[
@@ -185,28 +186,8 @@ class LibraryScreen extends ConsumerWidget {
   }
 
   Future<void> _createPlaylist(BuildContext context, WidgetRef ref) async {
-    final nameCtrl = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('New playlist'),
-        content: TextField(
-          controller: nameCtrl,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Playlist name'),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, nameCtrl.text.trim()),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-    if (name == null || name.isEmpty) return;
+    final name = await promptPlaylistName(context);
+    if (name == null) return;
 
     final client = ref.read(apiClientProvider);
     if (client == null) return;

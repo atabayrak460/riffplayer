@@ -49,16 +49,38 @@ describe('AddToPlaylistDialog', () => {
     expect(screen.getByRole('button', { name: /new playlist/i })).toBeInTheDocument();
   });
 
-  it('creating a new playlist adds the song to it and closes', async () => {
+  it('creating a new playlist asks for a name, then adds the song and closes', async () => {
     const user = userEvent.setup();
     const { onClose } = renderDialog();
     await screen.findByText('My Playlist');
 
     await user.click(screen.getByRole('button', { name: /new playlist/i }));
+    expect(subsonic.createPlaylistWithName).not.toHaveBeenCalled();
 
-    expect(subsonic.createPlaylistWithName).toHaveBeenCalledWith('New Playlist 2');
+    // A blank name can't be submitted.
+    const create = screen.getByRole('button', { name: 'Create' });
+    expect(create).toBeDisabled();
+    await user.type(screen.getByLabelText('Playlist name'), '   ');
+    expect(create).toBeDisabled();
+
+    await user.type(screen.getByLabelText('Playlist name'), ' Road trip{Enter}');
+
+    await waitFor(() => expect(subsonic.createPlaylistWithName).toHaveBeenCalledWith('Road trip'));
     await waitFor(() => expect(subsonic.addSongToPlaylist).toHaveBeenCalledWith('p-2', 't-1'));
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+  });
+
+  it('going back from the name prompt creates nothing', async () => {
+    const user = userEvent.setup();
+    const { onClose } = renderDialog();
+    await screen.findByText('My Playlist');
+
+    await user.click(screen.getByRole('button', { name: /new playlist/i }));
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(subsonic.createPlaylistWithName).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByText('My Playlist')).toBeInTheDocument();
   });
 
   it('adds the song to an existing playlist that does not contain it yet', async () => {

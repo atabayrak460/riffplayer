@@ -90,17 +90,44 @@ void main() {
     expect(find.text('Added to "My Playlist"'), findsNothing);
   });
 
-  testWidgets('"New playlist" confirms with a snackbar', (tester) async {
+  testWidgets('"New playlist" asks for a name, then creates and adds',
+      (tester) async {
     when(() => client.createPlaylist(any()))
         .thenAnswer((_) async => _playlist());
 
     await openDialog(tester);
     await tester.tap(find.text('New playlist'));
     await tester.pumpAndSettle();
+    verifyNever(() => client.createPlaylist(any()));
 
-    verify(() => client.createPlaylist('New Playlist 2')).called(1);
+    // Blank names can't be submitted.
+    await tester.enterText(find.byType(TextField), '   ');
+    await tester.pump();
+    expect(
+        tester
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Create'))
+            .onPressed,
+        isNull);
+
+    await tester.enterText(find.byType(TextField), '  Road trip ');
+    await tester.pump();
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+
+    verify(() => client.createPlaylist('Road trip')).called(1);
     verify(() => client.addSongToPlaylist('p-1', 's-1')).called(1);
-    expect(find.text('Added to "New Playlist 2"'), findsOneWidget);
+    expect(find.text('Added to "Road trip"'), findsOneWidget);
+  });
+
+  testWidgets('cancelling the name prompt creates nothing', (tester) async {
+    await openDialog(tester);
+    await tester.tap(find.text('New playlist'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel').last);
+    await tester.pumpAndSettle();
+
+    verifyNever(() => client.createPlaylist(any()));
+    expect(find.byType(AddToPlaylistDialog), findsOneWidget);
   });
 
   testWidgets('a long playlist list scrolls, so the last one is reachable',

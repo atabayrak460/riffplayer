@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
 import '../app_colors.dart';
+import 'playlist_name_dialog.dart';
 
 SnackBar _snack(String message) =>
     SnackBar(content: Text(message), duration: const Duration(seconds: 2));
@@ -15,18 +16,15 @@ class AddToPlaylistDialog extends ConsumerWidget {
     final playlistsAsync = ref.watch(playlistsProvider);
 
     // Previously this dialog could only add to an *existing* playlist — with
-    // none created yet it was a dead end, no way to get the song into a
-    // playlist without leaving the dialog, creating one blank from the
-    // Library screen, then coming back. Same default-naming convention as
-    // that screen's own "new playlist" action.
+    // none created yet it was a dead end. The name is asked for, never made up.
     Future<void> createAndAdd() async {
       final client = ref.read(apiClientProvider);
       if (client == null) return;
       // Captured before the awaits/pop, so the SnackBar still has a
       // messenger after the dialog's context is gone.
       final messenger = ScaffoldMessenger.of(context);
-      final count = playlistsAsync.valueOrNull?.length ?? 0;
-      final name = count > 0 ? 'New Playlist ${count + 1}' : 'New Playlist';
+      final name = await promptPlaylistName(context);
+      if (name == null) return;
       try {
         final playlist = await client.createPlaylist(name);
         await client.addSongToPlaylist(playlist.id, songId);
