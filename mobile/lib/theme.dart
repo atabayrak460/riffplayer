@@ -92,7 +92,9 @@ ThemeData buildTheme(Palette p, [AppSkin skin = AppSkin.standard]) {
       style: ElevatedButton.styleFrom(
         backgroundColor: p.brand,
         foregroundColor: p.onBrand,
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        // Horizontal padding matters for buttons sized to their content (the
+        // Play button): without it the label sits right against the edge.
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
         textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
