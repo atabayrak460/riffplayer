@@ -123,7 +123,11 @@ class RiffPlayerAudioHandler extends BaseAudioHandler
         _interruptions = interruptions ?? InterruptionPolicy() {
     _listenForInterruptions();
     // Forward playback state to audio_service
-    _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
+    // Not pipe(): that locks the subject, and switching shuffle on or off
+    // pushes a state of its own (see _setShuffleFlag), which then throws.
+    _player.playbackEventStream
+        .map(_transformEvent)
+        .listen(playbackState.add, onError: playbackState.addError);
 
     // Forward current media item to audio_service
     _player.sequenceStateStream.listen((state) {
