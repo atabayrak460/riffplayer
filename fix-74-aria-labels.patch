@@ -1,0 +1,132 @@
+diff --git a/web/src/components/DownloadButton.test.tsx b/web/src/components/DownloadButton.test.tsx
+index 15b9a7d..23723f5 100644
+--- a/web/src/components/DownloadButton.test.tsx
++++ b/web/src/components/DownloadButton.test.tsx
+@@ -34,6 +34,17 @@ describe('DownloadButton', () => {
+     expect(onDownload).not.toHaveBeenCalled();
+   });
+ 
++  it('exposes an accessible name for each icon-only state', () => {
++    const { unmount } = render(
++      <DownloadButton state={undefined} onDownload={vi.fn()} onRemove={vi.fn()} />,
++    );
++    expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument();
++    unmount();
++
++    render(<DownloadButton state="downloaded" onDownload={vi.fn()} onRemove={vi.fn()} />);
++    expect(screen.getByRole('button', { name: 'Remove download' })).toBeInTheDocument();
++  });
++
+   it('does not let the click bubble to a clickable parent row', async () => {
+     const parentClick = vi.fn();
+     render(
+diff --git a/web/src/components/DownloadButton.tsx b/web/src/components/DownloadButton.tsx
+index c6a0537..3491867 100644
+--- a/web/src/components/DownloadButton.tsx
++++ b/web/src/components/DownloadButton.tsx
+@@ -26,6 +26,7 @@ export function DownloadButton({ state, onDownload, onRemove, className = '' }:
+           onRemove();
+         }}
+         title="Remove download"
++        aria-label="Remove download"
+         className={`text-brand hover:text-red-400 transition-colors flex-shrink-0 ${className}`}
+       >
+         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+@@ -42,6 +43,7 @@ export function DownloadButton({ state, onDownload, onRemove, className = '' }:
+         onDownload();
+       }}
+       title="Download"
++      aria-label="Download"
+       className={`text-zinc-400 hover:text-zinc-50 transition-colors flex-shrink-0 ${className}`}
+     >
+       <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+diff --git a/web/src/components/LyricsPanel.tsx b/web/src/components/LyricsPanel.tsx
+index 5bee995..2115e12 100644
+--- a/web/src/components/LyricsPanel.tsx
++++ b/web/src/components/LyricsPanel.tsx
+@@ -91,7 +91,11 @@ export function LyricsPanel({ onClose, embedded = false }: Props) {
+               </button>
+             )}
+             {!embedded && (
+-              <button onClick={onClose} className="text-zinc-400 hover:text-zinc-50 transition-colors">
++              <button
++                onClick={onClose}
++                aria-label="Close lyrics"
++                className="text-zinc-400 hover:text-zinc-50 transition-colors"
++              >
+                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                 </svg>
+diff --git a/web/src/components/Sidebar.tsx b/web/src/components/Sidebar.tsx
+index 7d5c0a9..fc88897 100644
+--- a/web/src/components/Sidebar.tsx
++++ b/web/src/components/Sidebar.tsx
+@@ -117,6 +117,7 @@ export function Sidebar() {
+           <button
+             onClick={createPlaylist}
+             title="Create playlist"
++            aria-label="Create playlist"
+             className="text-zinc-500 hover:text-zinc-50 transition-colors"
+           >
+             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+diff --git a/web/src/components/StarButton.test.tsx b/web/src/components/StarButton.test.tsx
+index 758d2b3..2d8d765 100644
+--- a/web/src/components/StarButton.test.tsx
++++ b/web/src/components/StarButton.test.tsx
+@@ -34,6 +34,17 @@ describe('StarButton', () => {
+     expect(screen.getByTitle('Remove from favourites')).toBeInTheDocument();
+   });
+ 
++  it('exposes its current state as the accessible name', async () => {
++    const user = userEvent.setup();
++    render(<StarButton starred={false} opts={{ id: 't1' }} />);
++
++    expect(screen.getByRole('button', { name: 'Add to favourites' })).toBeInTheDocument();
++
++    await user.click(screen.getByRole('button', { name: 'Add to favourites' }));
++
++    expect(screen.getByRole('button', { name: 'Remove from favourites' })).toBeInTheDocument();
++  });
++
+   it('clicking toggles to starred, calls the API, and updates optimistically', async () => {
+     const user = userEvent.setup();
+     render(<StarButton starred={false} opts={{ id: 't1' }} />);
+diff --git a/web/src/components/StarButton.tsx b/web/src/components/StarButton.tsx
+index cc27cc9..f088058 100644
+--- a/web/src/components/StarButton.tsx
++++ b/web/src/components/StarButton.tsx
+@@ -45,10 +45,13 @@ export function StarButton({ starred: initialStarred, onToggle, opts, className
+     }
+   };
+ 
++  const label = starred ? 'Remove from favourites' : 'Add to favourites';
++
+   return (
+     <button
+       onClick={toggle}
+-      title={starred ? 'Remove from favourites' : 'Add to favourites'}
++      title={label}
++      aria-label={label}
+       className={`text-zinc-400 hover:text-brand transition-colors ${starred ? 'text-brand' : ''} ${className}`}
+     >
+       <svg className="w-5 h-5" fill={starred ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+diff --git a/web/src/pages/QueuePage.tsx b/web/src/pages/QueuePage.tsx
+index af135d5..5e69211 100644
+--- a/web/src/pages/QueuePage.tsx
++++ b/web/src/pages/QueuePage.tsx
+@@ -62,6 +62,7 @@ function QueueItem({ song, index, isCurrent, canRemove = true, onRemove, onPlay
+         {...listeners}
+         className="text-zinc-600 hover:text-zinc-400 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none"
+         title="Drag to reorder"
++        aria-label="Drag to reorder"
+       >
+         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+           <path d="M9 4a1 1 0 0 1 2 0v16a1 1 0 0 1-2 0V4zm4 0a1 1 0 0 1 2 0v16a1 1 0 0 1-2 0V4z" />
+@@ -87,6 +88,7 @@ function QueueItem({ song, index, isCurrent, canRemove = true, onRemove, onPlay
+       {canRemove && <button
+         onClick={onRemove}
+         title="Remove"
++        aria-label="Remove"
+         className="text-zinc-600 hover:text-red-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+       >
+         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

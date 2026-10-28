@@ -26,6 +26,7 @@ export function DownloadButton({ state, onDownload, onRemove, className = '' }: 
           onRemove();
         }}
         title="Remove download"
+        aria-label="Remove download"
         className={`text-brand hover:text-red-400 transition-colors flex-shrink-0 ${className}`}
       >
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -42,6 +43,7 @@ export function DownloadButton({ state, onDownload, onRemove, className = '' }: 
         onDownload();
       }}
       title="Download"
+      aria-label="Download"
       className={`text-zinc-400 hover:text-zinc-50 transition-colors flex-shrink-0 ${className}`}
     >
       <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

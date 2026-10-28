@@ -45,10 +45,13 @@ export function StarButton({ starred: initialStarred, onToggle, opts, className 
     }
   };
 
+  const label = starred ? 'Remove from favourites' : 'Add to favourites';
+
   return (
     <button
       onClick={toggle}
-      title={starred ? 'Remove from favourites' : 'Add to favourites'}
+      title={label}
+      aria-label={label}
       className={`text-zinc-400 hover:text-brand transition-colors ${starred ? 'text-brand' : ''} ${className}`}
     >
       <svg className="w-5 h-5" fill={starred ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

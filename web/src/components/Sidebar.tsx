@@ -117,6 +117,7 @@ export function Sidebar() {
           <button
             onClick={createPlaylist}
             title="Create playlist"
+            aria-label="Create playlist"
             className="text-zinc-500 hover:text-zinc-50 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

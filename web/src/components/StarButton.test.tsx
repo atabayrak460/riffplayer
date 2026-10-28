@@ -34,6 +34,17 @@ describe('StarButton', () => {
     expect(screen.getByTitle('Remove from favourites')).toBeInTheDocument();
   });
 
+  it('exposes its current state as the accessible name', async () => {
+    const user = userEvent.setup();
+    render(<StarButton starred={false} opts={{ id: 't1' }} />);
+
+    expect(screen.getByRole('button', { name: 'Add to favourites' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Add to favourites' }));
+
+    expect(screen.getByRole('button', { name: 'Remove from favourites' })).toBeInTheDocument();
+  });
+
   it('clicking toggles to starred, calls the API, and updates optimistically', async () => {
     const user = userEvent.setup();
     render(<StarButton starred={false} opts={{ id: 't1' }} />);

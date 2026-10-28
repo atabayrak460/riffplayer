@@ -34,6 +34,17 @@ describe('DownloadButton', () => {
     expect(onDownload).not.toHaveBeenCalled();
   });
 
+  it('exposes an accessible name for each icon-only state', () => {
+    const { unmount } = render(
+      <DownloadButton state={undefined} onDownload={vi.fn()} onRemove={vi.fn()} />,
+    );
+    expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument();
+    unmount();
+
+    render(<DownloadButton state="downloaded" onDownload={vi.fn()} onRemove={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Remove download' })).toBeInTheDocument();
+  });
+
   it('does not let the click bubble to a clickable parent row', async () => {
     const parentClick = vi.fn();
     render(
